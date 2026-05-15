@@ -1,2 +1,0 @@
-# Hellow word 
-#hellow yulian 
