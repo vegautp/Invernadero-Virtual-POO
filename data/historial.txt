@@ -1,0 +1,7 @@
+2026-05-15 10:18:56 | Temp: 25.37°C | Hum: 60.45% | Vent: False | Riego: False
+2026-05-15 10:18:58 | Temp: 25.59°C | Hum: 60.07% | Vent: False | Riego: False
+2026-05-15 10:19:00 | Temp: 25.54°C | Hum: 60.09% | Vent: False | Riego: False
+2026-05-15 10:19:10 | Temp: 25.25°C | Hum: 59.58% | Vent: False | Riego: False
+2026-05-15 10:19:12 | Temp: 25.36°C | Hum: 59.75% | Vent: False | Riego: False
+2026-05-15 10:21:46 | Temp: 24.79°C | Hum: 59.85% | Vent: False | Riego: False
+2026-05-15 10:21:48 | Temp: 24.95°C | Hum: 59.93% | Vent: False | Riego: False
