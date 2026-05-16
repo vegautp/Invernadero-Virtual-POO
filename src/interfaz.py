@@ -14,5 +14,5 @@ class VentanaInvernadero:
     def actualizar(self): 
         t, h, v, r = self.ctrl.procesar() 
         guardar_log(t, h, v, r) 
-        self.label.config(text=f"Temp: {t}°C | Hum: {h}%\nVentilador: {v}\nRiego: {r}") 
+        self.label.config(text=f"Temp: {t}°C | Hum: {h}%\nVentilador: {v:.1f}%\nRiego: {r:.1f}%")
         self.root.after(2000, self.actualizar) # Refrescar cada 2 segundos 
