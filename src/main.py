@@ -1,6 +1,6 @@
 import tkinter as tk 
 
-from interfaz import VentanaInvernadero 
+from interfaz import VentanaInvernadero
 
  
 
