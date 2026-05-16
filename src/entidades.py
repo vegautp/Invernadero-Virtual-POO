@@ -38,3 +38,6 @@ class SensorHumedad(Sensor):
 class Ventilador(Actuador):
     def __init__(self):
         super().__init__("Ventilador")
+
+class BombaRiego(Actuador):
+    def __init__(self): super().__init__("Bomba de Riego")
