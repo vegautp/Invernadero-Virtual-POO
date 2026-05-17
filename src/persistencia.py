@@ -15,14 +15,14 @@ class GestorPersistencia:
         if not self.ruta.exists():
             with self.ruta.open(mode='w', newline='', encoding='utf-8') as f:
                 writer = csv.writer(f)
-                writer.writerow(["Fecha_Hora", "Temperatura_C", "Humedad_Pct", "Ventilador", "Bomba_Riego"])
+                writer.writerow(["Fecha_Hora", "Temperatura_C", "Humedad_Pct", "Ventilador", "Bomba_Riego", "Luminosidad_Lux", "Iluminacion_LED"])
 
-    def registrar_lectura(self, t, h, v, r):
+    def registrar_lectura(self, t, h, v, r, luz=0, intensidad_luz=0):
         """Registra una nueva lectura de sensores y estado de actuadores."""
         fecha = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         with self.ruta.open(mode='a', newline='', encoding='utf-8') as f:
             writer = csv.writer(f)
-            writer.writerow([fecha, t, h, v, r])
+            writer.writerow([fecha, t, h, v, r, luz, intensidad_luz])
 
     def consultar_historial(self):
         """Lee el historial completo. Retorna una lista de diccionarios o lista vacía si no existe."""

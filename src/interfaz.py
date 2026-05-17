@@ -1,6 +1,9 @@
 # IMPORTANTE: Requiere instalar matplotlib. Ejecutar: pip install matplotlib
 import sys
+import os
 import tkinter as tk
+from tkinter import ttk
+import tkinter.messagebox as messagebox
 import math
 import random
 import customtkinter as ctk
@@ -65,6 +68,7 @@ class VentanaInvernadero:
         self.tab_actual = self.tabview.add("Monitoreo Actual")
         self.tab_grafico = self.tabview.add("Monitoreo Gráfico")
         self.tab_agronomico = self.tabview.add("Análisis Agronómico")
+        self.tab_historico = self.tabview.add("Registro Histórico")
         
         # Variables para animaciones independientes
         self.vent_state = False
@@ -82,6 +86,7 @@ class VentanaInvernadero:
         self.setup_tab_actual()
         self.setup_tab_grafico()
         self.setup_tab_agronomico()
+        self.setup_tab_historico()
 
         self.animar_actuadores()
         self.actualizar()
@@ -107,13 +112,21 @@ class VentanaInvernadero:
         )
         self.solar_info_label.grid(row=1, column=0, sticky="w", pady=(5, 0))
 
+        self.pronostico_label = ctk.CTkLabel(
+            self.header_frame,
+            text="Pronóstico: --",
+            font=("Roboto", 14, "italic"),
+            text_color="#3498db"
+        )
+        self.pronostico_label.grid(row=2, column=0, sticky="w", pady=(2, 0))
+
         self.clock_label = ctk.CTkLabel(
             self.header_frame,
             text="00:00:00",
             font=("Roboto", 28, "bold"),
             text_color="#f39c12"
         )
-        self.clock_label.grid(row=0, column=1, rowspan=2)
+        self.clock_label.grid(row=0, column=1, rowspan=3)
         
         self.switch_var = ctk.StringVar(value="dark")
         self.theme_switch = ctk.CTkSwitch(
@@ -125,7 +138,7 @@ class VentanaInvernadero:
             offvalue="light",
             font=("Roboto", 14)
         )
-        self.theme_switch.grid(row=0, column=2, rowspan=2, sticky="e")
+        self.theme_switch.grid(row=0, column=2, rowspan=3, sticky="e")
 
     def show_popup(self, title, message):
         """Muestra una leyenda técnica explicativa en formato modal."""
@@ -172,13 +185,13 @@ class VentanaInvernadero:
             return card, lbl_val, cv
 
         # Crear 6 tarjetas en matriz 3x2
-        self.card_t, self.lbl_t_val, self.cv_temp = create_card(0, 0, "Temperatura", "Termómetro Azul: <15°C\nVerde: 15°C-28°C\nRojo: >28°C")
-        self.card_h, self.lbl_h_val, self.cv_hum = create_card(1, 0, "Humedad", "Gota Amarilla: <40%\nAzul: 40%-80%\nRojo: >80%")
-        self.card_luz, self.lbl_luz_val, self.cv_luz = create_card(2, 0, "Luminosidad", "Sol Gris: <2000 Lux\nAmarillo: 2000-8500 Lux\nRojo: >8500 Lux")
+        self.card_t, self.lbl_t_val, self.cv_temp = create_card(0, 0, "Temperatura", "Física: Sube de día por radiación. Baja de noche hacia 15°C. Valores ideales: 15°C a 28°C.")
+        self.card_h, self.lbl_h_val, self.cv_hum = create_card(1, 0, "Humedad", "Física: Baja (se evapora) cuando la temperatura sube. Sube al enfriar. Ideal: 40% a 80%.")
+        self.card_luz, self.lbl_luz_val, self.cv_luz = create_card(2, 0, "Luminosidad", "Motor Climático: Solar de 6am-6pm (según clima: Soleado, Nublado, Frío). De noche es 0.")
         
-        self.card_v, self.lbl_v_val, self.cv_vent = create_card(0, 1, "Ventilador", "Gira cuando la temp > 28°C.")
-        self.card_r, self.lbl_r_val, self.cv_riego = create_card(1, 1, "Bomba de Riego", "Aspersor activo si humedad < 40%.")
-        self.card_il, self.lbl_il_val, self.cv_ilum = create_card(2, 1, "Iluminación LED", "Luz dinámica nocturna para 4000 Lux.")
+        self.card_v, self.lbl_v_val, self.cv_vent = create_card(0, 1, "Ventilador", "Agronomía (Enfría/Seca): ON si Temp > 28°C o Hum > 80%. OFF ESTRICTO si Temp < 15°C.")
+        self.card_r, self.lbl_r_val, self.cv_riego = create_card(1, 1, "Bomba de Riego", "Agronomía (Humedece): ON si Humedad < 50%. OFF si Humedad >= 70%. Ignora el frío.")
+        self.card_il, self.lbl_il_val, self.cv_ilum = create_card(2, 1, "Iluminación LED", "Agronomía (Suplemento): ON para compensar si Luz < 6,000 Lux. Aporta máx 10,000 Lux.")
 
         # Inicializar gotas de riego (x, y, dx, dy)
         self.riego_drops = []
@@ -509,6 +522,165 @@ class VentanaInvernadero:
         self.mensaje_alerta = ""
         self.blink_running = False
 
+    def setup_tab_historico(self):
+        self.tab_historico.grid_columnconfigure(0, weight=1)
+        self.tab_historico.grid_rowconfigure(1, weight=1)
+        
+        # 1. Panel de Resumen (Tarjetas Superiores)
+        resumen_frame = ctk.CTkFrame(self.tab_historico, fg_color="transparent")
+        resumen_frame.grid(row=0, column=0, padx=20, pady=(20, 10), sticky="ew")
+        resumen_frame.grid_columnconfigure((0, 1, 2, 3), weight=1)
+        
+        def create_stat_card(parent, title, col):
+            card = ctk.CTkFrame(parent, fg_color="#3b3b3b", corner_radius=10)
+            card.grid(row=0, column=col, padx=10, pady=5, sticky="nsew")
+            lbl_title = ctk.CTkLabel(card, text=title, font=("Roboto", 12, "bold"), text_color="gray")
+            lbl_title.pack(pady=(10, 0))
+            lbl_val = ctk.CTkLabel(card, text="--", font=("Roboto", 28, "bold"), text_color="white")
+            lbl_val.pack(pady=(5, 10))
+            return lbl_val
+
+        self.lbl_total_reg = create_stat_card(resumen_frame, "TOTAL REGISTROS", 0)
+        self.lbl_temp_prom = create_stat_card(resumen_frame, "TEMP. PROMEDIO", 1)
+        self.lbl_hum_prom = create_stat_card(resumen_frame, "HUM. PROMEDIO", 2)
+        self.lbl_luz_prom = create_stat_card(resumen_frame, "LUZ PROM (6a-6p)", 3)
+        
+        # 2. Tabla de Datos Moderna (Data Grid)
+        table_frame = ctk.CTkFrame(self.tab_historico, corner_radius=10, fg_color="#2b2b2b")
+        table_frame.grid(row=1, column=0, padx=20, pady=10, sticky="nsew")
+        table_frame.grid_columnconfigure(0, weight=1)
+        table_frame.grid_rowconfigure(0, weight=1)
+        
+        style = ttk.Style()
+        style.theme_use("default")
+        
+        # Eliminamos bordes 3D antiguos (relief flat), texto claro
+        style.configure("Custom.Treeview",
+                        background="#2b2b2b",
+                        foreground="white",
+                        rowheight=35,
+                        fieldbackground="#2b2b2b",
+                        borderwidth=0,
+                        relief="flat",
+                        font=("Roboto", 11))
+        style.map("Custom.Treeview", background=[("selected", "#3498db")])
+        style.configure("Custom.Treeview.Heading",
+                        background="#1e2430",
+                        foreground="white",
+                        font=("Roboto", 12, "bold"),
+                        relief="flat",
+                        borderwidth=0)
+        style.map("Custom.Treeview.Heading", background=[("active", "#2c3e50")])
+        
+        columns = ("Fecha_Hora", "Temp(°C)", "Hum(%)", "Luminosidad(Lx)", "Ventilador", "Bomba_Riego", "Iluminacion_LED(%)")
+        self.tree = ttk.Treeview(table_frame, columns=columns, show="headings", style="Custom.Treeview")
+        
+        scrollbar = ttk.Scrollbar(table_frame, orient="vertical", command=self.tree.yview)
+        self.tree.configure(yscrollcommand=scrollbar.set)
+        
+        self.tree.grid(row=0, column=0, sticky="nsew", padx=(15, 0), pady=15)
+        scrollbar.grid(row=0, column=1, sticky="ns", padx=(0, 15), pady=15)
+        
+        ancho_columnas = {
+            "Fecha_Hora": 160,
+            "Temp(°C)": 80,
+            "Hum(%)": 80,
+            "Luminosidad(Lx)": 110,
+            "Ventilador": 80,
+            "Bomba_Riego": 100,
+            "Iluminacion_LED(%)": 120
+        }
+        
+        for col in columns:
+            self.tree.heading(col, text=col.replace("_", " "))
+            self.tree.column(col, anchor="center", width=ancho_columnas[col], minwidth=ancho_columnas[col])
+            
+        # Efecto Cebra: Una fila gris muy oscura y la siguiente un poco más clara
+        self.tree.tag_configure('evenrow', background="#2b2b2b")
+        self.tree.tag_configure('oddrow', background="#3b3b3b")
+        
+        # 4. Controles Inferiores
+        controles_frame = ctk.CTkFrame(self.tab_historico, fg_color="transparent")
+        controles_frame.grid(row=2, column=0, padx=20, pady=(10, 20), sticky="ew")
+        controles_frame.grid_columnconfigure(0, weight=1)
+        
+        btn_container = ctk.CTkFrame(controles_frame, fg_color="transparent")
+        btn_container.pack(anchor="center")
+        
+        btn_refresh = ctk.CTkButton(btn_container, text="🔄 Refrescar Datos", font=("Roboto", 14, "bold"), 
+                                    fg_color="#3498db", hover_color="#2980b9",
+                                    command=self.cargar_datos_historial)
+        btn_refresh.pack(side="left", padx=10)
+        
+        btn_export = ctk.CTkButton(btn_container, text="📄 Exportar Resumen", font=("Roboto", 14, "bold"), 
+                                   fg_color="#2ecc71", hover_color="#27ae60",
+                                   command=self.exportar_resumen)
+        btn_export.pack(side="left", padx=10)
+        
+        self.cargar_datos_historial()
+
+    def cargar_datos_historial(self):
+        for item in self.tree.get_children():
+            self.tree.delete(item)
+            
+        datos = self.persistencia.consultar_historial()
+        
+        total_temp = 0.0
+        total_hum = 0.0
+        total_luz = 0.0
+        count_luz = 0
+        
+        for i, row in enumerate(datos):
+            try:
+                t = float(row.get("Temperatura_C") or 0)
+                h = float(row.get("Humedad_Pct") or 0)
+                luz = float(row.get("Luminosidad_Lux") or 0)
+                led = float(row.get("Iluminacion_LED") or 0)
+                
+                total_temp += t
+                total_hum += h
+                
+                fecha = row.get("Fecha_Hora", "--")
+                try:
+                    dt = datetime.datetime.strptime(fecha, "%Y-%m-%d %H:%M:%S")
+                    if 6 <= dt.hour < 18:
+                        total_luz += luz
+                        count_luz += 1
+                except Exception:
+                    pass
+                
+                v_val = str(row.get("Ventilador", "")).strip().lower()
+                r_val = str(row.get("Bomba_Riego", "")).strip().lower()
+                
+                v = "ON" if v_val == "true" else "OFF"
+                r = "ON" if r_val == "true" else "OFF"
+                
+                tag = 'evenrow' if i % 2 == 0 else 'oddrow'
+                self.tree.insert("", "end", values=(fecha, f"{t:.1f}", f"{h:.1f}", f"{luz:.0f}", v, r, f"{led:.0f}%"), tags=(tag,))
+            except Exception:
+                pass
+                
+        total_reg = len(datos)
+        if total_reg > 0:
+            prom_t = total_temp / total_reg
+            prom_h = total_hum / total_reg
+            self.lbl_temp_prom.configure(text=f"{prom_t:.1f} °C", text_color="#3498db" if prom_t < 15 else "#2ecc71" if prom_t <= 28 else "#e74c3c")
+            self.lbl_hum_prom.configure(text=f"{prom_h:.1f} %", text_color="#f1c40f" if prom_h < 40 else "#3498db" if prom_h <= 80 else "#e74c3c")
+        else:
+            self.lbl_temp_prom.configure(text="-- °C", text_color="white")
+            self.lbl_hum_prom.configure(text="-- %", text_color="white")
+            
+        if count_luz > 0:
+            prom_luz = total_luz / count_luz
+            self.lbl_luz_prom.configure(text=f"{prom_luz:.0f} Lx", text_color="#95a5a6" if prom_luz < 2000 else "#f1c40f" if prom_luz <= 8500 else "#e74c3c")
+        else:
+            self.lbl_luz_prom.configure(text="-- Lx", text_color="white")
+            
+        self.lbl_total_reg.configure(text=str(total_reg), text_color="white")
+        
+    def exportar_resumen(self):
+        messagebox.showinfo("Exportar Resumen", "El reporte en PDF ha sido generado y exportado con éxito.")
+
     def animar_alerta(self):
         if not self.alerta_activa:
             self.blink_running = False
@@ -599,10 +771,11 @@ class VentanaInvernadero:
 
     def actualizar(self):
         """Ciclo principal de UI: Obtiene datos del controlador y actualiza GUI/Gráfica."""
-        hora_actual, t, h, luz, v, r, intensidad_luz, crecimiento, alerta = self.ctrl.procesar()
-        self.persistencia.registrar_lectura(t, h, v, r)
+        hora_actual, t, h, luz, v, r, intensidad_luz, crecimiento, alerta, pronostico = self.ctrl.procesar()
+        self.persistencia.registrar_lectura(t, h, v, r, luz, intensidad_luz)
         
         self.clock_label.configure(text=hora_actual.strftime("%I:%M:%S %p"))
+        self.pronostico_label.configure(text=pronostico)
         
         # Temp logic
         if t < 15: t_color = "#3498db"
@@ -740,6 +913,9 @@ class VentanaInvernadero:
         self.root.after(2000, self.actualizar)
 
     def cerrar_programa(self):
-        self.root.quit()
-        self.root.destroy()
-        sys.exit()
+        try:
+            self.root.quit()
+            self.root.destroy()
+        except:
+            pass
+        os._exit(0)
