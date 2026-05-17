@@ -111,14 +111,13 @@ class VentanaInvernadero:
             font=("Roboto", 14)
         )
         self.solar_info_label.grid(row=1, column=0, sticky="w", pady=(5, 0))
-
-        self.pronostico_label = ctk.CTkLabel(
+        
+        self.estado_solar_label = ctk.CTkLabel(
             self.header_frame,
-            text="Pronóstico: --",
-            font=("Roboto", 14, "italic"),
-            text_color="#3498db"
+            text="Cargando estado solar...",
+            font=("Roboto", 15, "bold")
         )
-        self.pronostico_label.grid(row=2, column=0, sticky="w", pady=(2, 0))
+        self.estado_solar_label.grid(row=2, column=0, sticky="w", pady=(2, 0))
 
         self.clock_label = ctk.CTkLabel(
             self.header_frame,
@@ -159,10 +158,42 @@ class VentanaInvernadero:
 
     def setup_tab_actual(self):
         self.tab_actual.grid_columnconfigure((0, 1), weight=1)
-        self.tab_actual.grid_rowconfigure((0, 1, 2), weight=1)
+        self.tab_actual.grid_rowconfigure((0, 1, 2, 3), weight=1)
 
         bg_card = ("#e8e8e8", "#2a2d2e")
         bg_canvas = "#2a2d2e" if self.switch_var.get() == "dark" else "#e8e8e8"
+
+        # Contenedor Transparente Centrado
+        self.weather_container = ctk.CTkFrame(self.tab_actual, fg_color="transparent")
+        self.weather_container.grid(row=0, column=0, columnspan=2, padx=15, pady=(15, 5))
+
+        # Recuadro Izquierdo (Pronóstico - Altura Uniforme)
+        self.forecast_frame = ctk.CTkFrame(self.weather_container, fg_color=bg_card, corner_radius=15, border_width=2, border_color="#3498db")
+        self.forecast_frame.pack(side="left", padx=10, fill="y")
+        
+        self.pronostico_label = ctk.CTkLabel(
+            self.forecast_frame,
+            text="Cargando pronóstico del clima...",
+            font=("Roboto", 14, "bold"),
+            justify="left",
+            anchor="w",
+            text_color=("#2c3e50", "#3498db"),
+            height=55
+        )
+        self.pronostico_label.pack(padx=15, pady=12)
+        
+        # Recuadro Derecho (Sensores Externos - Altura Uniforme)
+        self.ext_weather_frame = ctk.CTkFrame(self.weather_container, fg_color=bg_card, corner_radius=15, border_width=2, border_color="#e67e22")
+        self.ext_weather_frame.pack(side="left", padx=10, fill="y")
+        
+        self.lbl_ext_temp = ctk.CTkLabel(
+            self.ext_weather_frame,
+            text="🌡️ Ext: -- °C | 💧 Hum: -- %",
+            font=("Roboto", 14, "bold"),
+            text_color="#e67e22",
+            height=0
+        )
+        self.lbl_ext_temp.pack(padx=15, pady=10, anchor="center")
 
         def create_card(row, col, title, info_text):
             card = ctk.CTkFrame(self.tab_actual, fg_color=bg_card, corner_radius=15, border_width=2, border_color="#3b3b3b")
@@ -184,14 +215,14 @@ class VentanaInvernadero:
             
             return card, lbl_val, cv
 
-        # Crear 6 tarjetas en matriz 3x2
-        self.card_t, self.lbl_t_val, self.cv_temp = create_card(0, 0, "Temperatura", "Física: Sube de día por radiación. Baja de noche hacia 15°C. Valores ideales: 15°C a 28°C.")
-        self.card_h, self.lbl_h_val, self.cv_hum = create_card(1, 0, "Humedad", "Física: Baja (se evapora) cuando la temperatura sube. Sube al enfriar. Ideal: 40% a 80%.")
-        self.card_luz, self.lbl_luz_val, self.cv_luz = create_card(2, 0, "Luminosidad", "Motor Climático: Solar de 6am-6pm (según clima: Soleado, Nublado, Frío). De noche es 0.")
+        # Crear 6 tarjetas en matriz 3x2, desplazadas hacia abajo por el banner
+        self.card_t, self.lbl_t_val, self.cv_temp = create_card(1, 0, "Temperatura", "Física: Sube de día por radiación. Baja de noche hacia 15°C. Valores ideales: 15°C a 28°C.")
+        self.card_h, self.lbl_h_val, self.cv_hum = create_card(2, 0, "Humedad", "Física: Baja (se evapora) cuando la temperatura sube. Sube al enfriar. Ideal: 40% a 80%.")
+        self.card_luz, self.lbl_luz_val, self.cv_luz = create_card(3, 0, "Luminosidad", "Motor Climático: Solar de 6am-6pm (según clima: Soleado, Nublado, Frío). De noche es 0.")
         
-        self.card_v, self.lbl_v_val, self.cv_vent = create_card(0, 1, "Ventilador", "Agronomía (Enfría/Seca): ON si Temp > 28°C o Hum > 80%. OFF ESTRICTO si Temp < 15°C.")
-        self.card_r, self.lbl_r_val, self.cv_riego = create_card(1, 1, "Bomba de Riego", "Agronomía (Humedece): ON si Humedad < 50%. OFF si Humedad >= 70%. Ignora el frío.")
-        self.card_il, self.lbl_il_val, self.cv_ilum = create_card(2, 1, "Iluminación LED", "Agronomía (Suplemento): ON para compensar si Luz < 6,000 Lux. Aporta máx 10,000 Lux.")
+        self.card_v, self.lbl_v_val, self.cv_vent = create_card(1, 1, "Ventilador", "Agronomía (Enfría/Seca): ON si Temp > 28°C o Hum > 80%. OFF si Temp < 15°C (salvo si Hum > 80% por seguridad).")
+        self.card_r, self.lbl_r_val, self.cv_riego = create_card(2, 1, "Bomba de Riego", "Agronomía (Humedece): ON si Humedad < 50%. OFF si Humedad >= 70%. Ignora el frío.")
+        self.card_il, self.lbl_il_val, self.cv_ilum = create_card(3, 1, "Iluminación LED", "Agronomía (Suplemento): ON para compensar si Luz < 6,000 Lux. Aporta máx 10,000 Lux.")
 
         # Inicializar gotas de riego (x, y, dx, dy)
         self.riego_drops = []
@@ -678,6 +709,61 @@ class VentanaInvernadero:
             
         self.lbl_total_reg.configure(text=str(total_reg), text_color="white")
         
+    def agregar_lectura_a_tabla(self, t, h, luz, v, r, led):
+        now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        v_str = "ON" if v else "OFF"
+        r_str = "ON" if r else "OFF"
+        
+        # Obtener el número actual de filas para alternar colores de fila
+        num_filas = len(self.tree.get_children())
+        tag = 'evenrow' if num_filas % 2 == 0 else 'oddrow'
+        
+        # Insertar al final del treeview
+        self.tree.insert("", "end", values=(now_str, f"{t:.1f}", f"{h:.1f}", f"{luz:.0f}", v_str, r_str, f"{led:.0f}%"), tags=(tag,))
+        
+        # Mantener un límite de 500 filas en la interfaz para evitar degradación de rendimiento
+        children = self.tree.get_children()
+        if len(children) > 500:
+            self.tree.delete(children[0])
+            
+        # Actualizar las estadísticas de la UI de forma rápida
+        datos = self.persistencia.consultar_historial()
+        total_reg = len(datos)
+        if total_reg > 0:
+            total_temp = 0.0
+            total_hum = 0.0
+            total_luz = 0.0
+            count_luz = 0
+            for row in datos:
+                try:
+                    rt = float(row.get("Temperatura_C") or 0)
+                    rh = float(row.get("Humedad_Pct") or 0)
+                    rluz = float(row.get("Luminosidad_Lux") or 0)
+                    
+                    total_temp += rt
+                    total_hum += rh
+                    
+                    fecha = row.get("Fecha_Hora", "--")
+                    dt = datetime.datetime.strptime(fecha, "%Y-%m-%d %H:%M:%S")
+                    if 6 <= dt.hour < 18:
+                        total_luz += rluz
+                        count_luz += 1
+                except Exception:
+                    pass
+                    
+            prom_t = total_temp / total_reg
+            prom_h = total_hum / total_reg
+            self.lbl_temp_prom.configure(text=f"{prom_t:.1f} °C", text_color="#3498db" if prom_t < 15 else "#2ecc71" if prom_t <= 28 else "#e74c3c")
+            self.lbl_hum_prom.configure(text=f"{prom_h:.1f} %", text_color="#f1c40f" if prom_h < 40 else "#3498db" if prom_h <= 80 else "#e74c3c")
+            
+            if count_luz > 0:
+                prom_luz = total_luz / count_luz
+                self.lbl_luz_prom.configure(text=f"{prom_luz:.0f} Lx", text_color="#95a5a6" if prom_luz < 2000 else "#f1c40f" if prom_luz <= 8500 else "#e74c3c")
+            else:
+                self.lbl_luz_prom.configure(text="-- Lx", text_color="white")
+                
+            self.lbl_total_reg.configure(text=str(total_reg), text_color="white")
+
     def exportar_resumen(self):
         messagebox.showinfo("Exportar Resumen", "El reporte en PDF ha sido generado y exportado con éxito.")
 
@@ -771,11 +857,27 @@ class VentanaInvernadero:
 
     def actualizar(self):
         """Ciclo principal de UI: Obtiene datos del controlador y actualiza GUI/Gráfica."""
-        hora_actual, t, h, luz, v, r, intensidad_luz, crecimiento, alerta, pronostico = self.ctrl.procesar()
+        resultado = self.ctrl.procesar()
+        hora_actual, t, h, luz, v, r, intensidad_luz, crecimiento, alerta, pronostico, t_ext, h_ext = resultado
         self.persistencia.registrar_lectura(t, h, v, r, luz, intensidad_luz)
         
         self.clock_label.configure(text=hora_actual.strftime("%I:%M:%S %p"))
         self.pronostico_label.configure(text=pronostico)
+        self.lbl_ext_temp.configure(text=f"🌡️ Ext: {t_ext:.1f} °C | 💧 Hum: {h_ext:.1f} %")
+        
+        # Estado Solar Dinámico para el Encabezado
+        hora = hora_actual.hour
+        if 6 <= hora < 12:
+            estado_solar = "Día (Mañana - Radiación activa)"
+            color_solar = "#f39c12"  # Dorado elegante
+        elif 12 <= hora < 18:
+            estado_solar = "Día (Medio día - Máxima radiación solar)"
+            color_solar = "#d35400"  # Naranja terracota elegante
+        else:
+            estado_solar = "Noche (Sin radiación solar)"
+            color_solar = "#2980b9"  # Azul oscuro elegante
+            
+        self.estado_solar_label.configure(text=estado_solar, text_color=color_solar)
         
         # Temp logic
         if t < 15: t_color = "#3498db"
@@ -910,6 +1012,9 @@ class VentanaInvernadero:
             self.alerta_activa = False
             self.target_rgb = [46, 204, 113] # #2ecc71 (Verde sano)
             
+        # Auto-refrescar la tabla y métricas del registro histórico de forma optimizada y fluida
+        self.agregar_lectura_a_tabla(t, h, luz, v, r, intensidad_luz)
+        
         self.root.after(2000, self.actualizar)
 
     def cerrar_programa(self):
