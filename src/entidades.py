@@ -22,6 +22,7 @@ class Actuador:
         self.nombre = nombre
         self.encendido = False
         self.potencia = 0.0
+        self.esfuerzo = 0.0
 
     def alternar(self, estado: bool):
         self.encendido = estado
@@ -41,7 +42,7 @@ class Planta:
     def __init__(self):
         self.porcentaje_crecimiento = 0.0
 
-    def evaluar_condiciones(self, temp, hum, luz=None, multiplicador=1.0):
+    def evaluar_condiciones(self, temp, hum, luz=None, multiplicador=1.0, es_de_dia=True):
         """
         Evalúa las condiciones ambientales y actualiza el crecimiento basándose en
         principios de fisiología vegetal:
@@ -65,9 +66,9 @@ class Planta:
             alerta = "Riesgo de proliferación de patógenos fúngicos (ej. Botrytis)"
         elif hum < 40.0:
             alerta = "Transpiración excesiva, estrés hídrico inminente"
-        elif luz is not None and luz < 2000:
+        elif luz is not None and luz < 2000 and es_de_dia:
             alerta = "Luz insuficiente: Riesgo de etiolación"
-        elif luz is not None and luz > 8500:
+        elif luz is not None and luz > 18500:
             alerta = "Radiación crítica: Estrés lumínico"
 
         # Simulación de crecimiento
@@ -77,7 +78,7 @@ class Planta:
         if alerta:
             self.porcentaje_crecimiento -= 0.02 * multiplicador  # Regresión leve por estrés
         else:
-            if 22.0 <= temp <= 26.0 and (luz is None or 4000 <= luz <= 7000):
+            if 18.0 <= temp <= 25.0 and (luz is None or 4000 <= luz <= 7000):
                 self.porcentaje_crecimiento += 0.05 * multiplicador # Crecimiento óptimo
             else:
                 self.porcentaje_crecimiento += 0.01 * multiplicador # Crecimiento subóptimo
@@ -223,6 +224,7 @@ class Calefaccion:
     def __init__(self):
         self.encendido = False
         self.potencia = 0.0  # Irá de 0.0 a 100.0 (Proporcional)
+        self.esfuerzo = 0.0
 
     def alternar(self, estado):
         self.encendido = estado
