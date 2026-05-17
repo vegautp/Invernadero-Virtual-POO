@@ -80,6 +80,25 @@ class Planta:
             
         return alerta
 
+class MotorClimatico:
+    """Motor encargado de generar un estado del clima y su pronóstico."""
+    def __init__(self):
+        self.climas = ["Soleado", "Nublado", "Frío"]
+        self.estado_actual = "Soleado"
+    
+    def actualizar_clima(self):
+        # 5% de probabilidad de cambio de clima en cada ciclo
+        if random.random() < 0.05:
+            self.estado_actual = random.choice(self.climas)
+            
+    def generar_pronostico(self, temp_actual):
+        if self.estado_actual == "Soleado":
+            return "Pronóstico: Día soleado con máximas de 32°C."
+        elif self.estado_actual == "Nublado":
+            return "Pronóstico: Día nublado, reducción de luz solar."
+        else: # Frío
+            return f"Actualmente a {temp_actual:.1f}°C, se estima un día frío y nublado."
+
 # Clases específicas que hereden de las bases
 class SensorTemperatura(Sensor):
     def __init__(self, valor_inicial=25.0):
