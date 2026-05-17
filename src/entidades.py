@@ -18,13 +18,20 @@ class Actuador:
     def __init__(self, nombre):
         self.nombre = nombre
         self.encendido = False
+        self.potencia = 0.0
 
     def alternar(self, estado: bool):
         self.encendido = estado
+        self.potencia = 100.0 if estado else 0.0
+
+    def ajustar_potencia(self, valor: float):
+        # Limitamos la potencia entre 0 y 100
+        self.potencia = max(0.0, min(100.0, float(valor)))
+        self.encendido = self.potencia > 0
 
     def __str__(self):
         estado_str = "Encendido" if self.encendido else "Apagado"
-        return f"{self.nombre}: {estado_str}"
+        return f"{self.nombre}: {estado_str} ({self.potencia:.1f}%)"
 
 class Planta:
     """Clase para simular el crecimiento y estado de estrés fisiológico de la planta."""

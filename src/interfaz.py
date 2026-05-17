@@ -10,7 +10,7 @@ import collections
 import datetime
 
 from controlador import Controlador
-from persistencia import guardar_log
+from persistencia import GestorPersistencia
 
 class ToolTip:
     """Clase para mostrar un texto emergente al pasar el cursor sobre un widget."""
@@ -45,6 +45,7 @@ class VentanaInvernadero:
         self.root.protocol("WM_DELETE_WINDOW", self.cerrar_programa)
         
         self.ctrl = Controlador()
+        self.persistencia = GestorPersistencia()
         
         self.max_len = 20
         self.temp_data = collections.deque(maxlen=self.max_len)
@@ -599,7 +600,7 @@ class VentanaInvernadero:
     def actualizar(self):
         """Ciclo principal de UI: Obtiene datos del controlador y actualiza GUI/Gráfica."""
         hora_actual, t, h, luz, v, r, intensidad_luz, crecimiento, alerta = self.ctrl.procesar()
-        guardar_log(t, h, v, r)
+        self.persistencia.registrar_lectura(t, h, v, r)
         
         self.clock_label.configure(text=hora_actual.strftime("%I:%M:%S %p"))
         
