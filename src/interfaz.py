@@ -54,8 +54,10 @@ class VentanaInvernadero:
         self.temp_data = collections.deque(maxlen=self.max_len)
         self.hum_data = collections.deque(maxlen=self.max_len)
         self.luz_data = collections.deque(maxlen=self.max_len)
+        self.calef_data = collections.deque(maxlen=self.max_len)
         self.time_data = collections.deque(maxlen=self.max_len)
         self.counter = 0
+        self.ultimo_refresco_pesado = datetime.datetime.now()
 
         self.root.grid_columnconfigure(0, weight=1)
         self.root.grid_rowconfigure(1, weight=1)
@@ -235,7 +237,7 @@ class VentanaInvernadero:
         self.card_h, self.lbl_h_val, self.cv_hum = create_card(2, 0, "Humedad", "Física: Baja (se evapora) cuando la temperatura sube. Sube al enfriar. Ideal: 40% a 80%.")
         self.card_luz, self.lbl_luz_val, self.cv_luz = create_card(3, 0, "Luminosidad", "Motor Climático: Solar de 6am-6pm (según clima: Soleado, Nublado, Frío). De noche es 0.")
         
-        self.card_v, self.lbl_v_val, self.cv_vent = create_card(1, 1, "Ventilador", "Agronomía (Enfría/Seca): ON si Temp > 28°C o Hum > 80%. OFF si Temp < 15°C (salvo si Hum > 80% por seguridad).")
+        self.card_v, self.lbl_v_val, self.cv_vent = create_card(1, 1, "Ventilador / Extractor", "Termodinámica: Extrae aire caliente si Temp > 25°C. Apagado estricto si Temp < 18°C para conservar calor.")
         self.card_r, self.lbl_r_val, self.cv_riego = create_card(2, 1, "Bomba de Riego", "Agronomía (Humedece): ON si Humedad < 50%. OFF si Humedad >= 70%. Ignora el frío.")
         self.card_il, self.lbl_il_val, self.cv_ilum = create_card(3, 1, "Iluminación LED", "Agronomía (Suplemento): ON para compensar si Luz < 6,000 Lux. Aporta máx 10,000 Lux.")
         self.card_calef, self.lbl_calef_val, self.cv_calef = create_card(4, 1, "Calefacción", "Control Proporcional: Se enciende si T < 18°C. Potencia proporcional al frío.")
@@ -358,6 +360,8 @@ class VentanaInvernadero:
         # Motor de Planta (Interpolación fluida)
         if self.crecimiento_display < self.crecimiento_target:
             self.crecimiento_display += (self.crecimiento_target - self.crecimiento_display) * 0.05
+        elif self.crecimiento_display > self.crecimiento_target:
+            self.crecimiento_display -= (self.crecimiento_display - self.crecimiento_target) * 0.05
         
         for i in range(3):
             if self.plant_rgb[i] < self.target_rgb[i]:
@@ -366,14 +370,50 @@ class VentanaInvernadero:
                 self.plant_rgb[i] -= min(2, self.plant_rgb[i] - self.target_rgb[i])
                 
         current_plant_color = f"#{int(self.plant_rgb[0]):02x}{int(self.plant_rgb[1]):02x}{int(self.plant_rgb[2]):02x}"
-        self.dibujar_planta(self.crecimiento_display, current_plant_color)
+        self.dibujar_planta(self.crecimiento_display, current_plant_color, getattr(self, 'clima_actual', 'Soleado'))
 
         self.root.after(50, self.animar_actuadores)
 
-    def dibujar_planta(self, crecimiento, color_hojas):
+    def dibujar_planta(self, crecimiento, color_hojas, clima_actual="Soleado"):
         self.cv_planta.delete("all")
         w, h, suelo_y = 300, 250, 220
         
+        # 1. Dibujar el cielo según el clima y ciclo de luz
+        if clima_actual == "Noche":
+            self.cv_planta.create_rectangle(0, 0, w, suelo_y, fill="#0b0f19", outline="")
+            # Estrellas y luna
+            self.cv_planta.create_oval(40, 40, 42, 42, fill="#ffffff", outline="")
+            self.cv_planta.create_oval(140, 20, 142, 22, fill="#ffffff", outline="")
+            self.cv_planta.create_oval(250, 70, 252, 72, fill="#ffffff", outline="")
+            self.cv_planta.create_oval(220, 20, 260, 60, fill="#f1c40f", outline="")
+        elif clima_actual == "Soleado":
+            self.cv_planta.create_rectangle(0, 0, w, suelo_y, fill="#5dade2", outline="")
+            # Sol radiante
+            self.cv_planta.create_oval(220, 20, 270, 70, fill="#f39c12", outline="")
+            # Rayos
+            self.cv_planta.create_line(245, 10, 245, 0, fill="#f39c12", width=3)
+            self.cv_planta.create_line(245, 80, 245, 90, fill="#f39c12", width=3)
+            self.cv_planta.create_line(210, 45, 200, 45, fill="#f39c12", width=3)
+            self.cv_planta.create_line(280, 45, 290, 45, fill="#f39c12", width=3)
+        elif clima_actual == "Nublado":
+            self.cv_planta.create_rectangle(0, 0, w, suelo_y, fill="#95a5a6", outline="")
+            # Nubes densas
+            self.cv_planta.create_oval(190, 30, 230, 70, fill="#7f8c8d", outline="")
+            self.cv_planta.create_oval(210, 10, 270, 70, fill="#7f8c8d", outline="")
+            self.cv_planta.create_oval(250, 30, 290, 70, fill="#7f8c8d", outline="")
+        elif clima_actual == "Frío":
+            self.cv_planta.create_rectangle(0, 0, w, suelo_y, fill="#aed6f1", outline="")
+            # Nube fría con copos
+            self.cv_planta.create_oval(190, 30, 230, 70, fill="#ecf0f1", outline="")
+            self.cv_planta.create_oval(210, 20, 270, 70, fill="#ecf0f1", outline="")
+            self.cv_planta.create_oval(250, 30, 290, 70, fill="#ecf0f1", outline="")
+            self.cv_planta.create_oval(210, 85, 214, 89, fill="#ffffff", outline="")
+            self.cv_planta.create_oval(240, 95, 244, 99, fill="#ffffff", outline="")
+            self.cv_planta.create_oval(270, 80, 274, 84, fill="#ffffff", outline="")
+        else:
+            self.cv_planta.create_rectangle(0, 0, w, suelo_y, fill="#34495e", outline="")
+            
+        # 2. Dibujar el suelo de tierra
         self.cv_planta.create_rectangle(0, suelo_y, w, h, fill="#5c4033", outline="")
         self.cv_planta.create_line(0, suelo_y, w, suelo_y, fill="#3e2723", width=4)
         
@@ -445,11 +485,11 @@ class VentanaInvernadero:
         )
         self.accesible_switch.grid(row=0, column=0, pady=(5, 5), sticky="e")
 
-        self.fig, (self.ax_temp, self.ax_hum, self.ax_luz) = plt.subplots(3, 1, figsize=(6, 8), dpi=100)
+        self.fig, (self.ax_temp, self.ax_hum, self.ax_luz, self.ax_calef) = plt.subplots(4, 1, figsize=(6, 10), dpi=100)
         self.fig.patch.set_facecolor('#2b2b2b')
         self.fig.subplots_adjust(hspace=0.6)
 
-        for ax in (self.ax_temp, self.ax_hum, self.ax_luz):
+        for ax in (self.ax_temp, self.ax_hum, self.ax_luz, self.ax_calef):
             ax.set_facecolor('#3b3b3b')
             ax.tick_params(colors='white')
             ax.xaxis.label.set_color('white')
@@ -460,18 +500,22 @@ class VentanaInvernadero:
             'temp_color': '#ff4757',
             'hum_color': '#2ed573',
             'luz_color': '#f1c40f',
+            'calef_color': '#e67e22',
             'temp_ls': '-',
             'hum_ls': '-',
-            'luz_ls': '-'
+            'luz_ls': '-',
+            'calef_ls': '-'
         }
         
         self.style_accesible = {
             'temp_color': '#ffa502',
             'hum_color': '#1e90ff',
             'luz_color': '#9b59b6',
+            'calef_color': '#e67e22',
             'temp_ls': '-',
             'hum_ls': '--',
-            'luz_ls': ':'
+            'luz_ls': ':',
+            'calef_ls': '-.'
         }
         
         self.current_style = self.style_normal
@@ -485,13 +529,19 @@ class VentanaInvernadero:
         self.line_hum, = self.ax_hum.plot([], [], label='Humedad (%)', color=self.current_style['hum_color'], linestyle=self.current_style['hum_ls'], linewidth=2)
         
         self.ax_luz.set_title("Historial Lumínico")
-        self.ax_luz.set_xlabel("Tiempo (Ciclos)")
         self.ax_luz.set_ylabel("Luminosidad (Lux)")
         self.line_luz, = self.ax_luz.plot([], [], label='Luminosidad (Lux)', color=self.current_style['luz_color'], linestyle=self.current_style['luz_ls'], linewidth=2)
+        
+        self.ax_calef.set_title("Evolución de Calefacción")
+        self.ax_calef.set_xlabel("Tiempo (Ciclos)")
+        self.ax_calef.set_ylabel("Potencia (%)")
+        self.ax_calef.set_ylim(-5, 105)
+        self.line_calef, = self.ax_calef.plot([], [], label='Calefacción (%)', color=self.current_style['calef_color'], linestyle=self.current_style['calef_ls'], linewidth=2)
         
         self.legend_temp = self.ax_temp.legend(facecolor='#2b2b2b', edgecolor='white', labelcolor='white')
         self.legend_hum = self.ax_hum.legend(facecolor='#2b2b2b', edgecolor='white', labelcolor='white')
         self.legend_luz = self.ax_luz.legend(facecolor='#2b2b2b', edgecolor='white', labelcolor='white')
+        self.legend_calef = self.ax_calef.legend(facecolor='#2b2b2b', edgecolor='white', labelcolor='white')
 
         self.canvas_plot = FigureCanvasTkAgg(self.fig, master=self.tab_grafico)
         self.canvas_plot.get_tk_widget().grid(row=1, column=0, sticky="nsew", padx=10, pady=5)
@@ -850,14 +900,14 @@ class VentanaInvernadero:
         cv_planta_bg = "#1A1D26" if self.switch_var.get() == "dark" else canvas_bg
         self.cv_planta.configure(bg=cv_planta_bg)
 
-        for ax in (self.ax_temp, self.ax_hum, self.ax_luz):
+        for ax in (self.ax_temp, self.ax_hum, self.ax_luz, self.ax_calef):
             ax.set_facecolor(bg_color)
             ax.tick_params(colors=text_color)
             ax.xaxis.label.set_color(text_color)
             ax.yaxis.label.set_color(text_color)
             ax.title.set_color(text_color)
         
-        for legend in (getattr(self, 'legend_temp', None), getattr(self, 'legend_hum', None), getattr(self, 'legend_luz', None)):
+        for legend in (getattr(self, 'legend_temp', None), getattr(self, 'legend_hum', None), getattr(self, 'legend_luz', None), getattr(self, 'legend_calef', None)):
             if legend:
                 legend.get_frame().set_facecolor(facecolor_leg)
                 legend.get_frame().set_edgecolor(text_color)
@@ -881,9 +931,13 @@ class VentanaInvernadero:
         self.line_luz.set_color(self.current_style['luz_color'])
         self.line_luz.set_linestyle(self.current_style['luz_ls'])
         
+        self.line_calef.set_color(self.current_style['calef_color'])
+        self.line_calef.set_linestyle(self.current_style['calef_ls'])
+        
         self.legend_temp.remove()
         self.legend_hum.remove()
         self.legend_luz.remove()
+        self.legend_calef.remove()
         
         facecolor = '#2b2b2b' if self.switch_var.get() == "dark" else '#f0f0f0'
         text_color = 'white' if self.switch_var.get() == "dark" else 'black'
@@ -891,14 +945,32 @@ class VentanaInvernadero:
         self.legend_temp = self.ax_temp.legend(facecolor=facecolor, edgecolor=text_color, labelcolor=text_color)
         self.legend_hum = self.ax_hum.legend(facecolor=facecolor, edgecolor=text_color, labelcolor=text_color)
         self.legend_luz = self.ax_luz.legend(facecolor=facecolor, edgecolor=text_color, labelcolor=text_color)
+        self.legend_calef = self.ax_calef.legend(facecolor=facecolor, edgecolor=text_color, labelcolor=text_color)
         
         self.canvas_plot.draw()
 
     def actualizar(self):
         """Ciclo principal de UI: Obtiene datos del controlador y actualiza GUI/Gráfica."""
         resultado = self.ctrl.procesar()
-        hora_actual, t, h, luz, v, r, intensidad_luz, calef_on, calef_pot, crecimiento, alerta, pronostico, t_ext, h_ext = resultado
-        self.persistencia.registrar_lectura(t, h, v, r, luz, intensidad_luz)
+        hora_actual, t, h, luz, v, r, intensidad_luz, calef_on, calef_pot, crecimiento, alerta, pronostico, t_ext, h_ext, esfuerzo_v, esfuerzo_r, esfuerzo_il, esfuerzo_c = resultado
+        
+        # Extraer el clima actual del pronóstico para la animación gráfica
+        self.clima_actual = "Soleado"
+        if "🌙" in pronostico or "Noche" in pronostico:
+            self.clima_actual = "Noche"
+        elif "☀️" in pronostico or "Soleado" in pronostico:
+            self.clima_actual = "Soleado"
+        elif "☁️" in pronostico or "Nublado" in pronostico:
+            self.clima_actual = "Nublado"
+        elif "❄️" in pronostico or "Frío" in pronostico:
+            self.clima_actual = "Frío"
+            
+        ahora_real = datetime.datetime.now()
+        hacer_refresco_pesado = (ahora_real - self.ultimo_refresco_pesado).total_seconds() >= 1.0 or self.ctrl.multiplicador_tiempo == 1.0
+        
+        if hacer_refresco_pesado:
+            self.ultimo_refresco_pesado = ahora_real
+            self.persistencia.registrar_lectura(t, h, v, r, luz, intensidad_luz)
         
         self.clock_label.configure(text=hora_actual.strftime("%I:%M:%S %p"))
         self.pronostico_label.configure(text=pronostico)
@@ -951,21 +1023,25 @@ class VentanaInvernadero:
         self.ilum_intensity = intensidad_luz
         
         v_color = "#2ecc71" if v else "#3b3b3b"
-        self.lbl_v_val.configure(text="ENCENDIDO" if v else "APAGADO", text_color=v_color if v else "gray")
+        estado_v = "ON" if v else "OFF"
+        self.lbl_v_val.configure(text=f"{estado_v} (Ciclo: {esfuerzo_v:.0f}%)", text_color=v_color if v else "gray")
         self.card_v.configure(border_color=v_color)
         
         r_color = "#3498db" if r else "#3b3b3b"
-        self.lbl_r_val.configure(text="ENCENDIDO" if r else "APAGADO", text_color=r_color if r else "gray")
+        estado_r = "ON" if r else "OFF"
+        self.lbl_r_val.configure(text=f"{estado_r} (Ciclo: {esfuerzo_r:.0f}%)", text_color=r_color if r else "gray")
         self.card_r.configure(border_color=r_color)
         
         il_color = "#f39c12" if intensidad_luz > 0 else "#3b3b3b"
-        self.lbl_il_val.configure(text=f"{intensidad_luz:.0f}%", text_color=il_color if intensidad_luz > 0 else "gray")
+        estado_il = "ON" if intensidad_luz > 0 else "OFF"
+        self.lbl_il_val.configure(text=f"{estado_il} (Ciclo: {esfuerzo_il:.0f}%)", text_color=il_color if intensidad_luz > 0 else "gray")
         self.card_il.configure(border_color=il_color)
         
         # Calefacción logic
         self.calef_potencia = calef_pot
         c_color = "#e74c3c" if calef_on else "#3b3b3b"
-        self.lbl_calef_val.configure(text=f"ON ({calef_pot:.0f}%)" if calef_on else "APAGADO", text_color=c_color if calef_on else "gray")
+        estado_c = "ON" if calef_on else "OFF"
+        self.lbl_calef_val.configure(text=f"{estado_c} (Ciclo: {esfuerzo_c:.0f}%)", text_color=c_color if calef_on else "gray")
         self.card_calef.configure(border_color=c_color)
 
         # Gráficas
@@ -975,10 +1051,12 @@ class VentanaInvernadero:
             self.temp_data.append(float(t))
             self.hum_data.append(float(h))
             self.luz_data.append(float(luz))
+            self.calef_data.append(float(esfuerzo_c))
             
             self.line_temp.set_data(self.time_data, self.temp_data)
             self.line_hum.set_data(self.time_data, self.hum_data)
             self.line_luz.set_data(self.time_data, self.luz_data)
+            self.line_calef.set_data(self.time_data, self.calef_data)
             
             self.ax_temp.relim()
             self.ax_temp.autoscale_view()
@@ -986,8 +1064,11 @@ class VentanaInvernadero:
             self.ax_hum.autoscale_view()
             self.ax_luz.relim()
             self.ax_luz.autoscale_view()
+            self.ax_calef.relim()
+            self.ax_calef.autoscale_view()
             
-            self.canvas_plot.draw()
+            if hacer_refresco_pesado:
+                self.canvas_plot.draw()
         except (ValueError, TypeError):
             pass 
             
@@ -1035,9 +1116,20 @@ class VentanaInvernadero:
                 self.lbl_prox_etapa_dias.configure(text="--")
                 self.lbl_prox_etapa_txt.configure(text="ÚLTIMA ETAPA ALCANZADA")
                 
+        elif delta_crec < 0:
+            self.lbl_dias.configure(text="ESTRÉS")
+            self.lbl_prox_etapa_dias.configure(text="PAUSADO")
+            self.lbl_prox_etapa_txt.configure(text="PLANTA EN RETROCESO ⚠️")
+            
+        elif delta_crec == 0 and crecimiento < 100:
+            self.lbl_dias.configure(text="PAUSADO")
+            self.lbl_prox_etapa_dias.configure(text="--")
+            self.lbl_prox_etapa_txt.configure(text="CRECIMIENTO ESTANCADO ⚠️")
+            
         elif crecimiento >= 100:
             self.lbl_dias.configure(text="0.0")
             self.lbl_prox_etapa_dias.configure(text="0.0")
+            self.lbl_prox_etapa_txt.configure(text="LISTA PARA COSECHA ✅")
             
         self.last_crecimiento = crecimiento
         
@@ -1058,9 +1150,11 @@ class VentanaInvernadero:
             self.target_rgb = [46, 204, 113] # #2ecc71 (Verde sano)
             
         # Auto-refrescar la tabla y métricas del registro histórico de forma optimizada y fluida
-        self.agregar_lectura_a_tabla(t, h, luz, v, r, intensidad_luz)
+        if hacer_refresco_pesado:
+            self.agregar_lectura_a_tabla(t, h, luz, v, r, intensidad_luz)
         
-        self.root.after(2000, self.actualizar)
+        delay = max(40, int(2000 / self.ctrl.multiplicador_tiempo))
+        self.root.after(delay, self.actualizar)
 
     def cerrar_programa(self):
         try:
