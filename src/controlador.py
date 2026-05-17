@@ -1,6 +1,6 @@
 import datetime
 import random
-from entidades import SensorTemperatura, SensorHumedad, SensorLuminosidad, Ventilador, BombaRiego, SistemaIluminacion, Planta, MotorClimatico
+from entidades import SensorTemperatura, SensorHumedad, SensorLuminosidad, Ventilador, BombaRiego, SistemaIluminacion, Planta, MotorClimatico, Calefaccion
 
 class Controlador:
     def __init__(self, sp_temp=25.0, kp_temp=10.0, sp_hum=60.0, kp_hum=5.0):
@@ -12,15 +12,26 @@ class Controlador:
         self.iluminacion = SistemaIluminacion()
         self.planta = Planta()
         self.motor_clima = MotorClimatico()
+        self.calefaccion = Calefaccion()
         
         # Parámetros de control proporcional
         self.sp_temp = sp_temp
         self.kp_temp = kp_temp
         self.sp_hum = sp_hum
         self.kp_hum = kp_hum
+        
+        # Variables para manejo del tiempo acelerado
+        self.tiempo_simulado = datetime.datetime.now()
+        self.ultimo_tick = datetime.datetime.now()
+        self.multiplicador_tiempo = 1.0
 
     def procesar(self):
-        hora_actual = datetime.datetime.now()
+        ahora = datetime.datetime.now()
+        dt_sec = (ahora - self.ultimo_tick).total_seconds()
+        self.ultimo_tick = ahora
+        self.tiempo_simulado += datetime.timedelta(seconds=dt_sec * self.multiplicador_tiempo)
+        
+        hora_actual = self.tiempo_simulado
         
         # 1. Actualizar clima exterior y obtener pronóstico
         self.motor_clima.actualizar_clima(hora_actual)
@@ -47,13 +58,14 @@ class Controlador:
         h_ext = self.motor_clima.hum_exterior
         
         # A) Conducción Térmica Pasiva: El invernadero tiende lentamente al clima exterior
-        t_actual += (t_ext - t_actual) * 0.06
-        h_actual += (h_ext - h_actual) * 0.02
+        # Limitamos el impacto del multiplicador en la conducción para evitar inestabilidad térmica
+        t_actual += (t_ext - t_actual) * min(1.0, 0.06 * self.multiplicador_tiempo)
+        h_actual += (h_ext - h_actual) * min(1.0, 0.02 * self.multiplicador_tiempo)
         
         # B) Efecto Invernadero (Calor solar atrapado)
         if es_de_dia:
             calor_solar = (luz_natural / 100000.0) * 2.2
-            t_actual += calor_solar
+            t_actual += calor_solar * self.multiplicador_tiempo
             
         # C) Impacto Activo de Actuadores del ciclo anterior
         if self.vent.encendido:
@@ -114,6 +126,31 @@ class Controlador:
             luz_total = luz_natural
             
         # 5. Lógica de Actuadores Térmicos e Hídricos
+        
+        # Sistema de Calefacción con Control Proporcional
+        setpoint_calefaccion = 18.0
+        if t < setpoint_calefaccion:
+            error = setpoint_calefaccion - t
+            # kp_temp define qué tan rápido responde (potencia por cada grado de error)
+            potencia_calculada = error * self.kp_temp
+            self.calefaccion.potencia = min(100.0, max(0.0, potencia_calculada))
+            self.calefaccion.encendido = True
+            
+            # Impacto térmico de la calefacción proporcional al tiempo
+            aporte_calor = (self.calefaccion.potencia / 100.0) * 1.5 * self.multiplicador_tiempo
+            t_actual += aporte_calor
+            # La calefacción reduce la humedad al calentar el aire
+            h_actual -= (self.calefaccion.potencia / 100.0) * 0.5 * self.multiplicador_tiempo
+            
+            # Recalculamos con el nuevo calor inyectado
+            self.temp.valor = max(10.0, min(50.0, t_actual))
+            self.hum.valor  = max(0.0,  min(100.0, h_actual))
+            t = self.temp.leer_valor()
+            h = self.hum.leer_valor()
+        else:
+            self.calefaccion.encendido = False
+            self.calefaccion.potencia = 0.0
+
         # Ventilador (Enfría y seca): 
         # ON si T > 28°C o H > 80%. OFF ESTRICTO si T < 15°C para conservar calor,
         # a menos que la humedad sea crítica (> 80.0%) para prevenir patógenos fúngicos (Botrytis).
@@ -133,10 +170,10 @@ class Controlador:
         # Entre 50% y 70%, mantiene el estado previo (histéresis)
         
         # Evaluar fisiología de la planta
-        alerta = self.planta.evaluar_condiciones(t, h, luz=luz_total)
+        alerta = self.planta.evaluar_condiciones(t, h, luz=luz_total, multiplicador=self.multiplicador_tiempo)
         
         # Obtenemos lecturas redondeadas del exterior para la UI
         t_ext = round(self.motor_clima.temp_exterior, 1)
         h_ext = round(self.motor_clima.hum_exterior, 1)
         
-        return hora_actual, t, h, round(luz_total, 2), self.vent.encendido, self.riego.encendido, round(self.iluminacion.intensidad, 2), self.planta.porcentaje_crecimiento, alerta, pronostico, t_ext, h_ext
+        return hora_actual, t, h, round(luz_total, 2), self.vent.encendido, self.riego.encendido, round(self.iluminacion.intensidad, 2), self.calefaccion.encendido, round(self.calefaccion.potencia, 2), self.planta.porcentaje_crecimiento, alerta, pronostico, t_ext, h_ext

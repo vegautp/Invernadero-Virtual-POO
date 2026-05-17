@@ -41,7 +41,7 @@ class Planta:
     def __init__(self):
         self.porcentaje_crecimiento = 0.0
 
-    def evaluar_condiciones(self, temp, hum, luz=None):
+    def evaluar_condiciones(self, temp, hum, luz=None, multiplicador=1.0):
         """
         Evalúa las condiciones ambientales y actualiza el crecimiento basándose en
         principios de fisiología vegetal:
@@ -75,12 +75,12 @@ class Planta:
         # Ahora, condiciones de estrés activo frenan y revierten levemente el crecimiento,
         # modelando el consumo de reservas energéticas de la planta bajo estrés fisiológico.
         if alerta:
-            self.porcentaje_crecimiento -= 0.02  # Regresión leve por estrés
+            self.porcentaje_crecimiento -= 0.02 * multiplicador  # Regresión leve por estrés
         else:
             if 22.0 <= temp <= 26.0 and (luz is None or 4000 <= luz <= 7000):
-                self.porcentaje_crecimiento += 0.05 # Crecimiento óptimo
+                self.porcentaje_crecimiento += 0.05 * multiplicador # Crecimiento óptimo
             else:
-                self.porcentaje_crecimiento += 0.01 # Crecimiento subóptimo
+                self.porcentaje_crecimiento += 0.01 * multiplicador # Crecimiento subóptimo
                 
         # Límites biológicos del ciclo de vida
         self.porcentaje_crecimiento = max(0.0, min(100.0, self.porcentaje_crecimiento))
@@ -219,3 +219,10 @@ class SistemaIluminacion(Actuador):
     def __init__(self):
         super().__init__("Sistema de Iluminación")
         self.intensidad = 0.0  # de 0 a 100%
+class Calefaccion:
+    def __init__(self):
+        self.encendido = False
+        self.potencia = 0.0  # Irá de 0.0 a 100.0 (Proporcional)
+
+    def alternar(self, estado):
+        self.encendido = estado

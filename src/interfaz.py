@@ -60,6 +60,7 @@ class VentanaInvernadero:
         self.root.grid_columnconfigure(0, weight=1)
         self.root.grid_rowconfigure(1, weight=1)
 
+        self.switch_var = ctk.StringVar(value="dark")
         self.setup_header()
         
         self.tabview = ctk.CTkTabview(self.root)
@@ -97,6 +98,7 @@ class VentanaInvernadero:
         self.header_frame.grid_columnconfigure(0, weight=1)
         self.header_frame.grid_columnconfigure(1, weight=1)
         self.header_frame.grid_columnconfigure(2, weight=1)
+        self.header_frame.grid_columnconfigure(3, weight=0)
         
         self.title_label = ctk.CTkLabel(
             self.header_frame, 
@@ -127,7 +129,6 @@ class VentanaInvernadero:
         )
         self.clock_label.grid(row=0, column=1, rowspan=3)
         
-        self.switch_var = ctk.StringVar(value="dark")
         self.theme_switch = ctk.CTkSwitch(
             self.header_frame, 
             text="Modo Oscuro", 
@@ -138,6 +139,20 @@ class VentanaInvernadero:
             font=("Roboto", 14)
         )
         self.theme_switch.grid(row=0, column=2, rowspan=3, sticky="e")
+        
+        self.speed_var = ctk.StringVar(value="x1")
+        self.speed_menu = ctk.CTkOptionMenu(
+            self.header_frame,
+            values=["x1", "x2", "x5", "x10", "x50"],
+            variable=self.speed_var,
+            command=self.cambiar_velocidad,
+            width=80
+        )
+        self.speed_menu.grid(row=0, column=3, rowspan=3, padx=(20, 0), sticky="e")
+
+    def cambiar_velocidad(self, choice):
+        mult = float(choice.replace("x", ""))
+        self.ctrl.multiplicador_tiempo = mult
 
     def show_popup(self, title, message):
         """Muestra una leyenda técnica explicativa en formato modal."""
@@ -158,7 +173,7 @@ class VentanaInvernadero:
 
     def setup_tab_actual(self):
         self.tab_actual.grid_columnconfigure((0, 1), weight=1)
-        self.tab_actual.grid_rowconfigure((0, 1, 2, 3), weight=1)
+        self.tab_actual.grid_rowconfigure((0, 1, 2, 3, 4), weight=1)
 
         bg_card = ("#e8e8e8", "#2a2d2e")
         bg_canvas = "#2a2d2e" if self.switch_var.get() == "dark" else "#e8e8e8"
@@ -223,6 +238,9 @@ class VentanaInvernadero:
         self.card_v, self.lbl_v_val, self.cv_vent = create_card(1, 1, "Ventilador", "Agronomía (Enfría/Seca): ON si Temp > 28°C o Hum > 80%. OFF si Temp < 15°C (salvo si Hum > 80% por seguridad).")
         self.card_r, self.lbl_r_val, self.cv_riego = create_card(2, 1, "Bomba de Riego", "Agronomía (Humedece): ON si Humedad < 50%. OFF si Humedad >= 70%. Ignora el frío.")
         self.card_il, self.lbl_il_val, self.cv_ilum = create_card(3, 1, "Iluminación LED", "Agronomía (Suplemento): ON para compensar si Luz < 6,000 Lux. Aporta máx 10,000 Lux.")
+        self.card_calef, self.lbl_calef_val, self.cv_calef = create_card(4, 1, "Calefacción", "Control Proporcional: Se enciende si T < 18°C. Potencia proporcional al frío.")
+
+        self.calef_potencia = 0.0
 
         # Inicializar gotas de riego (x, y, dx, dy)
         self.riego_drops = []
@@ -316,6 +334,26 @@ class VentanaInvernadero:
         self.cv_ilum.create_rectangle(32, 50, 48, 70, fill="#95a5a6", outline="")
         self.cv_ilum.create_line(35, 70, 45, 70, fill="#bdc3c7", width=3)
         self.cv_ilum.create_line(40, 25, 40, 45, fill="#f1c40f", width=2) # Filamento
+
+        # Calefacción
+        self.cv_calef.delete("all")
+        self.cv_calef.create_rectangle(20, 25, 60, 75, outline="#7f8c8d", width=2, fill="")
+        
+        for i in range(3):
+            y_base = 35 + i * 15
+            if self.calef_potencia > 0:
+                # Interpolamos el color de gris oscuro a rojo brillante incandescente
+                r_val = int(127 + (255 - 127) * (self.calef_potencia / 100.0))
+                g_val = int(140 - 140 * (self.calef_potencia / 100.0))
+                b_val = int(141 - 141 * (self.calef_potencia / 100.0))
+                color_resistencia = f"#{r_val:02x}{g_val:02x}{b_val:02x}"
+                # Añadir un halo de calor aleatorio
+                if random.random() < (self.calef_potencia / 100.0):
+                    self.cv_calef.create_line(25, y_base, 55, y_base, fill="#e74c3c", width=6, capstyle="round")
+            else:
+                color_resistencia = "#7f8c8d"
+            
+            self.cv_calef.create_line(25, y_base, 55, y_base, fill=color_resistencia, width=4, capstyle="round")
 
         # Motor de Planta (Interpolación fluida)
         if self.crecimiento_display < self.crecimiento_target:
@@ -773,13 +811,13 @@ class VentanaInvernadero:
             self.diag_label.configure(text="Condiciones fisiológicas óptimas", text_color="#2ecc71")
             return
             
-        current_color = self.diag_label.cget("text_color")
+        current_text = self.diag_label.cget("text")
         color_peligro = "#e74c3c" if "estrés" in self.mensaje_alerta.lower() or "deshidratación" in self.mensaje_alerta.lower() else "#f1c40f"
         
-        if current_color == "transparent":
+        if current_text == " ":
             self.diag_label.configure(text=self.mensaje_alerta, text_color=color_peligro)
         else:
-            self.diag_label.configure(text_color="transparent")
+            self.diag_label.configure(text=" ")
             
         self.root.after(500, self.animar_alerta)
 
@@ -807,6 +845,7 @@ class VentanaInvernadero:
         self.cv_vent.configure(bg=canvas_bg)
         self.cv_riego.configure(bg=canvas_bg)
         self.cv_ilum.configure(bg=canvas_bg)
+        self.cv_calef.configure(bg=canvas_bg)
         
         cv_planta_bg = "#1A1D26" if self.switch_var.get() == "dark" else canvas_bg
         self.cv_planta.configure(bg=cv_planta_bg)
@@ -858,7 +897,7 @@ class VentanaInvernadero:
     def actualizar(self):
         """Ciclo principal de UI: Obtiene datos del controlador y actualiza GUI/Gráfica."""
         resultado = self.ctrl.procesar()
-        hora_actual, t, h, luz, v, r, intensidad_luz, crecimiento, alerta, pronostico, t_ext, h_ext = resultado
+        hora_actual, t, h, luz, v, r, intensidad_luz, calef_on, calef_pot, crecimiento, alerta, pronostico, t_ext, h_ext = resultado
         self.persistencia.registrar_lectura(t, h, v, r, luz, intensidad_luz)
         
         self.clock_label.configure(text=hora_actual.strftime("%I:%M:%S %p"))
@@ -923,6 +962,12 @@ class VentanaInvernadero:
         self.lbl_il_val.configure(text=f"{intensidad_luz:.0f}%", text_color=il_color if intensidad_luz > 0 else "gray")
         self.card_il.configure(border_color=il_color)
         
+        # Calefacción logic
+        self.calef_potencia = calef_pot
+        c_color = "#e74c3c" if calef_on else "#3b3b3b"
+        self.lbl_calef_val.configure(text=f"ON ({calef_pot:.0f}%)" if calef_on else "APAGADO", text_color=c_color if calef_on else "gray")
+        self.card_calef.configure(border_color=c_color)
+
         # Gráficas
         try:
             self.counter += 1
