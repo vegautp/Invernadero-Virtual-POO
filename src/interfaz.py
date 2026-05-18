@@ -14,6 +14,7 @@ import datetime
 
 from controlador import Controlador
 from persistencia import GestorPersistencia
+from ui.panel_graficos import PanelMonitoreoGrafico
 
 class ToolTip:
     """Clase para mostrar un texto emergente al pasar el cursor sobre un widget."""
@@ -50,13 +51,7 @@ class VentanaInvernadero:
         self.ctrl = Controlador()
         self.persistencia = GestorPersistencia()
         
-        self.max_len = 20
-        self.temp_data = collections.deque(maxlen=self.max_len)
-        self.hum_data = collections.deque(maxlen=self.max_len)
-        self.luz_data = collections.deque(maxlen=self.max_len)
-        self.calef_data = collections.deque(maxlen=self.max_len)
-        self.time_data = collections.deque(maxlen=self.max_len)
-        self.counter = 0
+        self.current_data = (0.0, 0.0, 0.0, False, False, 0.0, 0.0)
         self.ultimo_refresco_pesado = datetime.datetime.now()
 
         self.root.grid_columnconfigure(0, weight=1)
@@ -787,76 +782,16 @@ class VentanaInvernadero:
         self.tab_grafico.grid_columnconfigure(0, weight=1)
         self.tab_grafico.grid_rowconfigure(1, weight=1)
 
-        self.accesible_var = ctk.BooleanVar(value=False)
-        self.accesible_switch = ctk.CTkSwitch(
-            self.tab_grafico,
-            text="Modo Accesible (Daltónicos)",
-            command=self.update_plot_style,
-            variable=self.accesible_var,
-            font=("Roboto", 14)
+        # Instanciar el nuevo panel gráfico independiente
+        self.panel_grafico = PanelMonitoreoGrafico(
+            master=self.tab_grafico,
+            obtener_datos_cb=self.obtener_datos_actuales,
+            switch_var=self.switch_var
         )
-        self.accesible_switch.grid(row=0, column=0, pady=(5, 5), sticky="e")
 
-        self.fig, (self.ax_temp, self.ax_hum, self.ax_luz, self.ax_calef) = plt.subplots(4, 1, figsize=(6, 10), dpi=100)
-        self.fig.patch.set_facecolor('#2b2b2b')
-        self.fig.subplots_adjust(hspace=0.6)
-
-        for ax in (self.ax_temp, self.ax_hum, self.ax_luz, self.ax_calef):
-            ax.set_facecolor('#3b3b3b')
-            ax.tick_params(colors='white')
-            ax.xaxis.label.set_color('white')
-            ax.yaxis.label.set_color('white')
-            ax.title.set_color('white')
-        
-        self.style_normal = {
-            'temp_color': '#ff4757',
-            'hum_color': '#2ed573',
-            'luz_color': '#f1c40f',
-            'calef_color': '#e67e22',
-            'temp_ls': '-',
-            'hum_ls': '-',
-            'luz_ls': '-',
-            'calef_ls': '-'
-        }
-        
-        self.style_accesible = {
-            'temp_color': '#ffa502',
-            'hum_color': '#1e90ff',
-            'luz_color': '#9b59b6',
-            'calef_color': '#e67e22',
-            'temp_ls': '-',
-            'hum_ls': '--',
-            'luz_ls': ':',
-            'calef_ls': '-.'
-        }
-        
-        self.current_style = self.style_normal
-
-        self.ax_temp.set_title("Evolución de Temperatura")
-        self.ax_temp.set_ylabel("Temperatura (°C)")
-        self.line_temp, = self.ax_temp.plot([], [], label='Temperatura (°C)', color=self.current_style['temp_color'], linestyle=self.current_style['temp_ls'], linewidth=2)
-        
-        self.ax_hum.set_title("Evolución de Humedad")
-        self.ax_hum.set_ylabel("Humedad (%)")
-        self.line_hum, = self.ax_hum.plot([], [], label='Humedad (%)', color=self.current_style['hum_color'], linestyle=self.current_style['hum_ls'], linewidth=2)
-        
-        self.ax_luz.set_title("Historial Lumínico")
-        self.ax_luz.set_ylabel("Luminosidad (Lux)")
-        self.line_luz, = self.ax_luz.plot([], [], label='Luminosidad (Lux)', color=self.current_style['luz_color'], linestyle=self.current_style['luz_ls'], linewidth=2)
-        
-        self.ax_calef.set_title("Evolución de Calefacción")
-        self.ax_calef.set_xlabel("Tiempo (Ciclos)")
-        self.ax_calef.set_ylabel("Potencia (%)")
-        self.ax_calef.set_ylim(-5, 105)
-        self.line_calef, = self.ax_calef.plot([], [], label='Calefacción (%)', color=self.current_style['calef_color'], linestyle=self.current_style['calef_ls'], linewidth=2)
-        
-        self.legend_temp = self.ax_temp.legend(facecolor='#2b2b2b', edgecolor='white', labelcolor='white')
-        self.legend_hum = self.ax_hum.legend(facecolor='#2b2b2b', edgecolor='white', labelcolor='white')
-        self.legend_luz = self.ax_luz.legend(facecolor='#2b2b2b', edgecolor='white', labelcolor='white')
-        self.legend_calef = self.ax_calef.legend(facecolor='#2b2b2b', edgecolor='white', labelcolor='white')
-
-        self.canvas_plot = FigureCanvasTkAgg(self.fig, master=self.tab_grafico)
-        self.canvas_plot.get_tk_widget().grid(row=1, column=0, sticky="nsew", padx=10, pady=5)
+    def obtener_datos_actuales(self):
+        """Devuelve la tupla con el estado actual para que el panel gráfico la procese cada 10s."""
+        return self.current_data
 
     def setup_tab_agronomico(self):
         self.tab_agronomico.grid_columnconfigure(0, weight=1)
@@ -1188,17 +1123,12 @@ class VentanaInvernadero:
             ctk.set_appearance_mode("dark")
             self.theme_switch.configure(text="Modo Oscuro")
             self.fig.patch.set_facecolor('#2b2b2b')
-            bg_color = '#3b3b3b'
-            text_color = 'white'
-            facecolor_leg = '#2b2b2b'
             canvas_bg = "#2a2d2e"
         else:
             ctk.set_appearance_mode("light")
             self.theme_switch.configure(text="Modo Claro")
-            self.fig.patch.set_facecolor('#f0f0f0')
-            bg_color = '#ffffff'
-            text_color = 'black'
-            facecolor_leg = '#f0f0f0'
+            if hasattr(self, 'fig'):
+                self.fig.patch.set_facecolor('#f0f0f0')
             canvas_bg = "#e8e8e8"
 
         self.cv_temp.configure(bg=canvas_bg)
@@ -1213,54 +1143,9 @@ class VentanaInvernadero:
         cv_planta_bg = "#1A1D26" if self.switch_var.get() == "dark" else canvas_bg
         self.cv_planta.configure(bg=cv_planta_bg)
 
-        for ax in (self.ax_temp, self.ax_hum, self.ax_luz, self.ax_calef):
-            ax.set_facecolor(bg_color)
-            ax.tick_params(colors=text_color)
-            ax.xaxis.label.set_color(text_color)
-            ax.yaxis.label.set_color(text_color)
-            ax.title.set_color(text_color)
-        
-        for legend in (getattr(self, 'legend_temp', None), getattr(self, 'legend_hum', None), getattr(self, 'legend_luz', None), getattr(self, 'legend_calef', None)):
-            if legend:
-                legend.get_frame().set_facecolor(facecolor_leg)
-                legend.get_frame().set_edgecolor(text_color)
-                for text in legend.get_texts():
-                    text.set_color(text_color)
-                
-        self.canvas_plot.draw()
-
-    def update_plot_style(self):
-        if self.accesible_var.get():
-            self.current_style = self.style_accesible
-        else:
-            self.current_style = self.style_normal
-            
-        self.line_temp.set_color(self.current_style['temp_color'])
-        self.line_temp.set_linestyle(self.current_style['temp_ls'])
-        
-        self.line_hum.set_color(self.current_style['hum_color'])
-        self.line_hum.set_linestyle(self.current_style['hum_ls'])
-        
-        self.line_luz.set_color(self.current_style['luz_color'])
-        self.line_luz.set_linestyle(self.current_style['luz_ls'])
-        
-        self.line_calef.set_color(self.current_style['calef_color'])
-        self.line_calef.set_linestyle(self.current_style['calef_ls'])
-        
-        self.legend_temp.remove()
-        self.legend_hum.remove()
-        self.legend_luz.remove()
-        self.legend_calef.remove()
-        
-        facecolor = '#2b2b2b' if self.switch_var.get() == "dark" else '#f0f0f0'
-        text_color = 'white' if self.switch_var.get() == "dark" else 'black'
-        
-        self.legend_temp = self.ax_temp.legend(facecolor=facecolor, edgecolor=text_color, labelcolor=text_color)
-        self.legend_hum = self.ax_hum.legend(facecolor=facecolor, edgecolor=text_color, labelcolor=text_color)
-        self.legend_luz = self.ax_luz.legend(facecolor=facecolor, edgecolor=text_color, labelcolor=text_color)
-        self.legend_calef = self.ax_calef.legend(facecolor=facecolor, edgecolor=text_color, labelcolor=text_color)
-        
-        self.canvas_plot.draw()
+        if hasattr(self, 'panel_grafico'):
+            self.panel_grafico.configurar_ejes()
+            self.panel_grafico.canvas_plot.draw()
 
     def actualizar(self):
         """Ciclo principal de UI: Obtiene datos del controlador y actualiza GUI/Gráfica."""
@@ -1401,32 +1286,8 @@ class VentanaInvernadero:
         self.card_malla.configure(border_color=malla_border)
 
 
-        try:
-            self.counter += 1
-            self.time_data.append(self.counter)
-            self.temp_data.append(float(t))
-            self.hum_data.append(float(h))
-            self.luz_data.append(float(luz))
-            self.calef_data.append(float(esfuerzo_c))
-            
-            self.line_temp.set_data(self.time_data, self.temp_data)
-            self.line_hum.set_data(self.time_data, self.hum_data)
-            self.line_luz.set_data(self.time_data, self.luz_data)
-            self.line_calef.set_data(self.time_data, self.calef_data)
-            
-            self.ax_temp.relim()
-            self.ax_temp.autoscale_view()
-            self.ax_hum.relim()
-            self.ax_hum.autoscale_view()
-            self.ax_luz.relim()
-            self.ax_luz.autoscale_view()
-            self.ax_calef.relim()
-            self.ax_calef.autoscale_view()
-            
-            if hacer_refresco_pesado:
-                self.canvas_plot.draw()
-        except (ValueError, TypeError):
-            pass 
+        # Actualizamos la tupla de datos actuales para el PanelMonitoreoGrafico independiente
+        self.current_data = (t, h, luz, v, r, esfuerzo_il, esfuerzo_c)
             
         # Agronómico Premium
         self.crecimiento_target = crecimiento
