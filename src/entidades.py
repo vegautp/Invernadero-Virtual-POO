@@ -42,22 +42,22 @@ class Planta:
     def __init__(self):
         self.porcentaje_crecimiento = 0.0
 
-    def evaluar_condiciones(self, temp, hum, luz=None, multiplicador=1.0, es_de_dia=True):
+    def evaluar_condiciones(self, temp, hum, luz=None, multiplicador=1.0, es_de_dia=True, estado_fotoperiodo=False):
         """
         Evalúa las condiciones ambientales y actualiza el crecimiento basándose en
-        principios de fisiología vegetal:
-        - Temperatura alta (>30°C): Cierre estomático, detiene la fotosíntesis,
-          riesgo de deshidratación y estrés térmico.
-        - Humedad alta (>80%): Baja tasa de transpiración, condensación foliar,
-          favorece aparición de patógenos fúngicos (ej. Botrytis).
-        - Humedad baja (<40%): Aumenta el déficit de presión de vapor, 
-          causando pérdida excesiva de agua y estrés hídrico.
-        - Temperatura óptima (22-26°C): Tasa fotosintética máxima, crecimiento activo.
-        - Luz óptima (4000-7000 Lux combinando natural y artificial): Crecimiento normal.
-        - Luz baja (< 2000 Lux): Advertencia "Luz insuficiente: Riesgo de etiolación".
-        - Luz excesiva (> 8500 Lux): Advertencia "Radiación crítica: Estrés lumínico".
+        principios de fisiología vegetal.
         """
         alerta = ""
+        
+        # Requerimientos Dinámicos según Etapa
+        if self.porcentaje_crecimiento <= 20:
+            ideal_lux = 10000.0
+        elif self.porcentaje_crecimiento <= 70:
+            ideal_lux = 25000.0
+        else:
+            ideal_lux = 45000.0
+            
+        limite_estres_lux = 65000.0
         
         # Validaciones de estrés (prioridad biológica)
         if temp > 30.0:
@@ -66,22 +66,19 @@ class Planta:
             alerta = "Riesgo de proliferación de patógenos fúngicos (ej. Botrytis)"
         elif hum < 40.0:
             alerta = "Transpiración excesiva, estrés hídrico inminente"
-        elif luz is not None and luz < 2000 and es_de_dia:
-            alerta = "Luz insuficiente: Riesgo de etiolación"
-        elif luz is not None and luz > 18500:
-            alerta = "Radiación crítica: Estrés lumínico"
+        elif luz is not None and luz > limite_estres_lux:
+            alerta = "Peligro: Estrés lumínico severo (Cierre de estomas)"
+        elif luz is not None and es_de_dia and not estado_fotoperiodo and luz < (ideal_lux * 0.7):
+            alerta = "Luz natural insuficiente para la etapa actual"
 
         # Simulación de crecimiento
-        # BUG CORREGIDO: antes, el estrés no tenía efecto sobre el crecimiento acumulado.
-        # Ahora, condiciones de estrés activo frenan y revierten levemente el crecimiento,
-        # modelando el consumo de reservas energéticas de la planta bajo estrés fisiológico.
         if alerta:
             self.porcentaje_crecimiento -= 0.02 * multiplicador  # Regresión leve por estrés
         else:
-            if 18.0 <= temp <= 25.0 and (luz is None or 4000 <= luz <= 7000):
-                self.porcentaje_crecimiento += 0.05 * multiplicador # Crecimiento óptimo
+            if 18.0 <= temp <= 25.0 and (luz is None or (ideal_lux * 0.7) <= luz <= limite_estres_lux):
+                self.porcentaje_crecimiento += 0.05 * multiplicador
             else:
-                self.porcentaje_crecimiento += 0.01 * multiplicador # Crecimiento subóptimo
+                self.porcentaje_crecimiento += 0.01 * multiplicador
                 
         # Límites biológicos del ciclo de vida
         self.porcentaje_crecimiento = max(0.0, min(100.0, self.porcentaje_crecimiento))
@@ -89,100 +86,193 @@ class Planta:
         return alerta
 
 class MotorClimatico:
-    """Motor encargado de generar un estado del clima y su pronóstico."""
+    """
+    Motor climático con 3 bloques diarios fijos, transiciones suaves (Markov)
+    y estados climáticos separados para el día y la noche.
+
+    Bloques:
+      - Bloque 0: 00:00 – 05:59 (Madrugada) → estados nocturnos
+      - Bloque 1: 06:00 – 16:59 (Día)       → estados diurnos
+      - Bloque 2: 17:00 – 23:59 (Noche)     → estados nocturnos
+    """
+
+    # Estados climáticos por tipo de período
+    CLIMAS_DIA   = ["Soleado", "Nublado", "Día Opaco", "Lluvia", "Tormenta", "Frío"]
+    CLIMAS_NOCHE = ["Despejado", "Nublado", "Lluvia", "Tormenta", "Frío"]
+
+    # ── Cadenas de Markov ────────────────────────────────────────────────────
+    # Pesos de transición hacia el siguiente BLOQUE DE DÍA (índices = CLIMAS_DIA)
+    # CLIMAS_DIA = ["Soleado", "Nublado", "Día Opaco", "Lluvia", "Tormenta", "Frío"]
+    # Se aumentaron significativamente las probabilidades para favorecer días "Soleados" (cálidos) como norma general.
+    TRANS_A_DIA = {
+        "Soleado":    [0.75, 0.13, 0.06, 0.03, 0.01, 0.02],
+        "Nublado":    [0.50, 0.28, 0.12, 0.06, 0.01, 0.03],
+        "Día Opaco":  [0.40, 0.25, 0.20, 0.10, 0.02, 0.03],
+        "Lluvia":     [0.25, 0.20, 0.18, 0.25, 0.08, 0.04],
+        "Tormenta":   [0.20, 0.15, 0.15, 0.35, 0.10, 0.05],
+        "Frío":       [0.35, 0.18, 0.15, 0.12, 0.04, 0.16],
+        "Despejado":  [0.80, 0.11, 0.05, 0.02, 0.01, 0.01],
+    }
+    # Pesos de transición hacia el siguiente BLOQUE DE NOCHE (índices = CLIMAS_NOCHE)
+    # CLIMAS_NOCHE = ["Despejado", "Nublado", "Lluvia", "Tormenta", "Frío"]
+    TRANS_A_NOCHE = {
+        "Soleado":    [0.72, 0.15, 0.06, 0.02, 0.05],
+        "Nublado":    [0.48, 0.30, 0.12, 0.05, 0.05],
+        "Día Opaco":  [0.42, 0.25, 0.18, 0.08, 0.07],
+        "Lluvia":     [0.30, 0.20, 0.32, 0.12, 0.06],
+        "Tormenta":   [0.25, 0.15, 0.25, 0.25, 0.10],
+        "Frío":       [0.40, 0.18, 0.12, 0.05, 0.25],
+        "Despejado":  [0.80, 0.12, 0.04, 0.01, 0.03],
+    }
+
+    # ── Parámetros físicos ────────────────────────────────────────────────────
+    PARAMS = {
+        "Soleado":    {"temp_base": 33.0, "hum_base": 35.0, "oscilacion": 8.0},
+        "Nublado":    {"temp_base": 23.0, "hum_base": 65.0, "oscilacion": 4.0},
+        "Día Opaco":  {"temp_base": 20.0, "hum_base": 72.0, "oscilacion": 3.0},
+        "Lluvia":     {"temp_base": 17.0, "hum_base": 90.0, "oscilacion": 2.0},
+        "Tormenta":   {"temp_base": 15.0, "hum_base": 95.0, "oscilacion": 2.5},
+        "Frío":       {"temp_base": 10.0, "hum_base": 80.0, "oscilacion": 3.5},
+        "Despejado":  {"temp_base": 18.0, "hum_base": 55.0, "oscilacion": 5.5},
+    }
+
+    ICONOS = {
+        "Soleado":    "☀️ Soleado",
+        "Nublado":    "☁️ Nublado",
+        "Día Opaco":  "🌫️ Día Opaco",
+        "Lluvia":     "🌧️ Lluvia",
+        "Tormenta":   "⛈️ Tormenta",
+        "Frío":       "❄️ Frío",
+        "Despejado":  "🌙 Despejado",
+    }
+
     def __init__(self):
-        self.climas = ["Soleado", "Nublado", "Frío"]
-        self.estado_actual = random.choice(self.climas)
-        self.clima_siguiente_dia = random.choice(self.climas)
-        self.temp_exterior = 25.0
-        self.hum_exterior = 60.0
-    
+        self.bloque_actual = -1       # -1 fuerza la inicialización en el primer ciclo
+        self.estado_actual = "Nublado"
+        self.temp_exterior = 20.0
+        self.hum_exterior  = 65.0
+
+    # ── Utilidades internas ──────────────────────────────────────────────────
+    @staticmethod
+    def _bloque(hora: int) -> int:
+        """0 = Madrugada 00-05 | 1 = Día 06-16 | 2 = Noche 17-23"""
+        if hora < 6:   return 0
+        if hora < 17:  return 1
+        return 2
+
+    def _transicionar(self, es_noche: bool) -> str:
+        if es_noche:
+            return random.choices(
+                self.CLIMAS_NOCHE,
+                weights=self.TRANS_A_NOCHE.get(self.estado_actual, [0.30, 0.30, 0.20, 0.10, 0.10]),
+                k=1
+            )[0]
+        else:
+            return random.choices(
+                self.CLIMAS_DIA,
+                weights=self.TRANS_A_DIA.get(self.estado_actual, [0.25, 0.30, 0.20, 0.13, 0.06, 0.06]),
+                k=1
+            )[0]
+
+    def _predecir_dia(self) -> str:
+        """Devuelve el estado climático más probable para el próximo bloque de día."""
+        return random.choices(
+            self.CLIMAS_DIA,
+            weights=self.TRANS_A_DIA.get(self.estado_actual, [0.25, 0.30, 0.20, 0.13, 0.06, 0.06]),
+            k=1
+        )[0]
+
+    # ── API pública ──────────────────────────────────────────────────────────
     def actualizar_clima(self, hora_actual):
-        # 5% de probabilidad de cambio de clima en cada ciclo
-        if random.random() < 0.05:
-            self.estado_actual = random.choice(self.climas)
-            self.clima_siguiente_dia = random.choice(self.climas)
+        hora   = hora_actual.hour
+        bloque = self._bloque(hora)
+
+        if bloque != self.bloque_actual:
+            # ── Cambio de bloque → transición Markov ──
+            es_noche = (bloque != 1)
+            self.estado_actual = self._transicionar(es_noche)
+            self.bloque_actual = bloque
+
         self.actualizar_clima_exterior(hora_actual)
-            
+
     def actualizar_clima_exterior(self, hora_actual):
         hora = hora_actual.hour
-        
-        # 1. Determinar valores de clima de fondo
-        if self.estado_actual == "Soleado":
-            temp_base = 33.0
-            hum_base = 35.0
-        elif self.estado_actual == "Nublado":
-            temp_base = 22.0
-            hum_base = 65.0
-        else: # Frío
-            temp_base = 10.0
-            hum_base = 80.0
-            
-        # 2. Ciclo Diario de Temperatura (el pico de calor exterior es a las 14:00 (2:00 PM))
-        oscilacion_temp = 7.0 if self.estado_actual == "Soleado" else 4.0
-        # math.cos((hora - 14) * 2 * math.pi / 24) oscila de 1.0 (a las 14:00) a -1.0 (a las 02:00)
+        p = self.PARAMS.get(self.estado_actual, self.PARAMS["Nublado"])
+
+        # Ciclo higrotérmico diario: pico de calor a las 14:00
         factor_diario = math.cos((hora - 14) * 2 * math.pi / 24)
-        
-        self.temp_exterior = temp_base + factor_diario * oscilacion_temp + random.uniform(-0.5, 0.5)
-        # La humedad exterior oscila en sentido inverso a la temperatura (relación higrotérmica natural)
-        self.hum_exterior = hum_base - factor_diario * (oscilacion_temp * 1.5) + random.uniform(-1.0, 1.0)
-        
-        # Límites reales de física exterior
+
+        self.temp_exterior = (
+            p["temp_base"]
+            + factor_diario * p["oscilacion"]
+            + random.uniform(-0.4, 0.4)
+        )
+        self.hum_exterior = (
+            p["hum_base"]
+            - factor_diario * p["oscilacion"] * 1.5
+            + random.uniform(-0.8, 0.8)
+        )
+
         self.temp_exterior = max(-5.0, min(48.0, self.temp_exterior))
-        self.hum_exterior = max(10.0, min(100.0, self.hum_exterior))
+        self.hum_exterior  = max(10.0, min(100.0, self.hum_exterior))
 
     def generar_pronostico(self, hora_actual):
-        # Determinamos el periodo del día
-        hora = hora_actual.hour
-        
-        # Etiqueta del clima actual con emojis representativos
-        iconos = {
-            "Soleado": "☀️ Soleado",
-            "Nublado": "☁️ Nublado",
-            "Frío": "❄️ Frío"
+        hora   = hora_actual.hour
+        bloque = self._bloque(hora)
+        icono  = self.ICONOS.get(self.estado_actual, "🌡️")
+
+        # ── Textos por estado y período ──────────────────────────────────────
+        TEXTOS = {
+            "Soleado": {
+                0: "",   # nunca ocurre de día
+                1: "Cielo despejado. Alta radiación solar y temperatura en aumento constante.",
+                2: "",
+            },
+            "Nublado": {
+                0: "Madrugada nublada. Temperatura estable y humedad media.",
+                1: "Cielo cubierto. Radiación atenuada. LED suplementario activo.",
+                2: "Noche nublada. Temperatura y humedad estables.",
+            },
+            "Día Opaco": {
+                0: "",
+                1: "Cielo opaco sin rayos directos. LED al máximo rendimiento.",
+                2: "",
+            },
+            "Lluvia": {
+                0: "Lluvia nocturna. Temperatura baja y alta humedad exterior.",
+                1: "Lluvia activa. Alta humedad. Bomba de riego pausada.",
+                2: "Lluvia nocturna persistente. Temperatura a la baja.",
+            },
+            "Tormenta": {
+                0: "Tormenta en madrugada. Humedad extrema. Calefacción activa.",
+                1: "Tormenta eléctrica. Baja luminosidad. Sistemas al máximo.",
+                2: "Tormenta nocturna. Temperatura muy baja. Alta humedad.",
+            },
+            "Frío": {
+                0: "Madrugada gélida. Calefacción prioritaria.",
+                1: "Día frío. Baja radiación. Calefacción y LED activos.",
+                2: "Noche gélida. Mínima por debajo de 8°C. Calefacción activa.",
+            },
+            "Despejado": {
+                0: "Madrugada despejada y fresca. Cielo estrellado. Temperatura descendiendo.",
+                1: "",
+                2: "Noche despejada. Cielo estrellado. Temperatura estable a la baja.",
+            },
         }
-        icono_actual = iconos.get(self.estado_actual, "🌡️")
-        
-        # Pronóstico dinámico profesional
-        if 6 <= hora < 12:
-            # Mañana (06:00 AM - 11:59 AM)
-            if self.estado_actual == "Soleado":
-                detalle = "Mañana despejada. Radiación solar intensa con incremento térmico rápido."
-            elif self.estado_actual == "Nublado":
-                detalle = "Mañana cubierta. Radiación natural atenuada por nubes densas."
-            else:  # Frío
-                detalle = "Mañana gélida. Baja radiación natural con viento helado del exterior."
-            
-            pronostico = f"📅 Clima de Hoy ({icono_actual}): {detalle}"
-            
-        elif 12 <= hora < 18:
-            # Mediodía / Tarde (12:00 PM - 05:59 PM) - Sol Cenital
-            if self.estado_actual == "Soleado":
-                detalle = "Sol Cenital. Máxima radiación fotosintética activa y alta carga térmica exterior."
-            elif self.estado_actual == "Nublado":
-                detalle = "Tarde templada. Sol cenital bloqueado por nubes, aporte lumínico moderado."
-            else:  # Frío
-                detalle = "Tarde fría. Radiación reducida con mínima absorción de calor ambiental."
-                
-            pronostico = f"📅 Clima de Hoy ({icono_actual}): {detalle}"
-            
+
+        detalle = TEXTOS.get(self.estado_actual, {}).get(bloque, "")
+
+        if bloque == 0:
+            pronostico = f"🌙 Madrugada: {detalle}"
+        elif bloque == 1:
+            periodo = "Mañana" if hora < 12 else "Tarde"
+            pronostico = f"📅 {periodo}: {detalle}"
         else:
-            # Noche (06:00 PM - 05:59 AM) - Pronóstico para el día siguiente
-            icono_siguiente = iconos.get(self.clima_siguiente_dia, "🌡️")
-            
-            # Estimación de temperatura nocturna mínima
-            if self.clima_siguiente_dia == "Soleado":
-                est_noche = "Noche despejada y fresca, estimación mínima estable de 15.0°C."
-            elif self.clima_siguiente_dia == "Nublado":
-                est_noche = "Noche templada y húmeda, estimación mínima de 16.5°C."
-            else:  # Frío
-                est_noche = "Noche gélida, estimación mínima por debajo de 12.0°C."
-                
-            pronostico = (
-                f"🌙 {est_noche}\n"
-                f"🔮 Pronóstico Mañana ({icono_siguiente}): Se prevé transición a día {self.clima_siguiente_dia.lower()}."
-            )
-            
+            # Bloque 2: tarde-noche con predicción del día siguiente
+            pred_dia    = self._predecir_dia()
+            icono_pred  = self.ICONOS.get(pred_dia, "🌡️")
+            pronostico = f"🌆 Tarde-Noche: {detalle}"
+
         return pronostico
 
 # Clases específicas que hereden de las bases

@@ -79,6 +79,7 @@ class VentanaInvernadero:
         self.riego_state = False
         self.riego_drops = []
         self.ilum_intensity = 0.0
+        self.malla_anim_pct = 0.0
 
         # Variables para Motor Gráfico de Planta
         self.plant_rgb = [46, 204, 113] # #2ecc71
@@ -90,6 +91,7 @@ class VentanaInvernadero:
         self.setup_tab_grafico()
         self.setup_tab_agronomico()
         self.setup_tab_historico()
+        self.setup_time_banner()
 
         self.animar_actuadores()
         self.actualizar()
@@ -101,6 +103,7 @@ class VentanaInvernadero:
         self.header_frame.grid_columnconfigure(1, weight=1)
         self.header_frame.grid_columnconfigure(2, weight=1)
         self.header_frame.grid_columnconfigure(3, weight=0)
+        self.header_frame.grid_columnconfigure(4, weight=0)
         
         self.title_label = ctk.CTkLabel(
             self.header_frame, 
@@ -111,8 +114,8 @@ class VentanaInvernadero:
         
         self.solar_info_label = ctk.CTkLabel(
             self.header_frame,
-            text="☀️ Amanecer: 06:00 AM | 🌙 Ocaso: 06:00 PM",
-            font=("Roboto", 14)
+            text="☀️ Fotoperiodo Activo: 07:00 AM a 11:59 PM (Descanso: 12:00 AM a 07:00 AM)",
+            font=("Roboto", 13)
         )
         self.solar_info_label.grid(row=1, column=0, sticky="w", pady=(5, 0))
         
@@ -140,7 +143,18 @@ class VentanaInvernadero:
             offvalue="light",
             font=("Roboto", 14)
         )
-        self.theme_switch.grid(row=0, column=2, rowspan=3, sticky="e")
+        self.theme_switch.grid(row=0, column=2, rowspan=3, sticky="e", padx=10)
+        
+        self.btn_abrir_banner = ctk.CTkButton(
+            self.header_frame,
+            text="⏱️ Configurar Hora",
+            font=("Roboto", 14, "bold"),
+            fg_color="#8e44ad",
+            hover_color="#9b59b6",
+            command=self.abrir_banner_tiempo,
+            width=140
+        )
+        self.btn_abrir_banner.grid(row=0, column=3, rowspan=3, padx=(10, 10))
         
         self.speed_var = ctk.StringVar(value="x1")
         self.speed_menu = ctk.CTkOptionMenu(
@@ -150,7 +164,84 @@ class VentanaInvernadero:
             command=self.cambiar_velocidad,
             width=80
         )
-        self.speed_menu.grid(row=0, column=3, rowspan=3, padx=(20, 0), sticky="e")
+        self.speed_menu.grid(row=0, column=4, rowspan=3, padx=(10, 0), sticky="e")
+
+    def setup_time_banner(self):
+        self.banner_frame = ctk.CTkFrame(self.root, width=280, height=250, corner_radius=15, fg_color="#1e2430", border_width=2, border_color="#3498db")
+        self.banner_frame.place(relx=1.3, rely=0.1, anchor="ne")
+        self.banner_frame.pack_propagate(False)
+        
+        top_frame = ctk.CTkFrame(self.banner_frame, fg_color="transparent")
+        top_frame.pack(fill="x", padx=10, pady=(10, 5))
+        
+        lbl_title = ctk.CTkLabel(top_frame, text="Controlador de Tiempo", font=("Roboto", 16, "bold"), text_color="white")
+        lbl_title.pack(side="left", padx=5)
+        
+        btn_close = ctk.CTkButton(top_frame, text="✖", width=30, height=30, corner_radius=15, fg_color="#e74c3c", hover_color="#c0392b", font=("Roboto", 14, "bold"), command=self.cerrar_banner_tiempo)
+        btn_close.pack(side="right")
+        
+        inputs_frame = ctk.CTkFrame(self.banner_frame, fg_color="transparent")
+        inputs_frame.pack(pady=15)
+        
+        self.entry_hora = ctk.CTkEntry(inputs_frame, width=60, font=("Roboto", 24, "bold"), justify="center", placeholder_text="HH")
+        self.entry_hora.pack(side="left", padx=5)
+        
+        lbl_dots = ctk.CTkLabel(inputs_frame, text=":", font=("Roboto", 24, "bold"))
+        lbl_dots.pack(side="left")
+        
+        self.entry_minuto = ctk.CTkEntry(inputs_frame, width=60, font=("Roboto", 24, "bold"), justify="center", placeholder_text="MM")
+        self.entry_minuto.pack(side="left", padx=5)
+        
+        self.ampm_var = ctk.StringVar(value="AM")
+        self.menu_ampm = ctk.CTkOptionMenu(inputs_frame, values=["AM", "PM"], variable=self.ampm_var, width=70, font=("Roboto", 14, "bold"))
+        self.menu_ampm.pack(side="left", padx=5)
+        
+        btn_frame = ctk.CTkFrame(self.banner_frame, fg_color="transparent")
+        btn_frame.pack(pady=15)
+        
+        btn_aceptar = ctk.CTkButton(btn_frame, text="Aceptar", width=100, fg_color="#2ecc71", hover_color="#27ae60", font=("Roboto", 14, "bold"), command=self.aplicar_hora_manual)
+        btn_aceptar.pack(side="left", padx=10)
+        
+        btn_cancelar = ctk.CTkButton(btn_frame, text="Cancelar", width=100, fg_color="#7f8c8d", hover_color="#95a5a6", font=("Roboto", 14, "bold"), command=self.cerrar_banner_tiempo)
+        btn_cancelar.pack(side="right", padx=10)
+
+    def abrir_banner_tiempo(self, current_relx=1.3):
+        if current_relx > 0.98:
+            current_relx -= 0.04
+            self.banner_frame.place(relx=current_relx, rely=0.1, anchor="ne")
+            self.root.after(15, self.abrir_banner_tiempo, current_relx)
+        else:
+            self.banner_frame.place(relx=0.98, rely=0.1, anchor="ne")
+
+    def cerrar_banner_tiempo(self, current_relx=0.98):
+        if current_relx < 1.3:
+            current_relx += 0.04
+            self.banner_frame.place(relx=current_relx, rely=0.1, anchor="ne")
+            self.root.after(15, self.cerrar_banner_tiempo, current_relx)
+        else:
+            self.banner_frame.place(relx=1.3, rely=0.1, anchor="ne")
+
+    def aplicar_hora_manual(self):
+        try:
+            h = int(self.entry_hora.get())
+            m = int(self.entry_minuto.get())
+            ampm = self.ampm_var.get()
+            
+            if not (1 <= h <= 12) or not (0 <= m <= 59):
+                raise ValueError
+                
+            hora_24 = h
+            if ampm == "PM" and h != 12:
+                hora_24 += 12
+            elif ampm == "AM" and h == 12:
+                hora_24 = 0
+                
+            self.ctrl.fijar_hora_manual(hora_24, m)
+            self.cerrar_banner_tiempo()
+            
+        except ValueError:
+            from tkinter import messagebox
+            messagebox.showerror("Error", "Por favor ingresa una hora válida (HH: 1-12, MM: 0-59).")
 
     def cambiar_velocidad(self, choice):
         mult = float(choice.replace("x", ""))
@@ -174,94 +265,258 @@ class VentanaInvernadero:
         btn.pack(pady=10)
 
     def setup_tab_actual(self):
-        self.tab_actual.grid_columnconfigure((0, 1), weight=1)
-        self.tab_actual.grid_rowconfigure((0, 1, 2, 3, 4), weight=1)
+        # 1. Contenedor Infinito (Scrollable)
+        self.scroll_actual = ctk.CTkScrollableFrame(self.tab_actual, fg_color="transparent")
+        self.scroll_actual.pack(fill="both", expand=True, padx=5, pady=5)
 
         bg_card = ("#e8e8e8", "#2a2d2e")
         bg_canvas = "#2a2d2e" if self.switch_var.get() == "dark" else "#e8e8e8"
 
-        # Contenedor Transparente Centrado
-        self.weather_container = ctk.CTkFrame(self.tab_actual, fg_color="transparent")
-        self.weather_container.grid(row=0, column=0, columnspan=2, padx=15, pady=(15, 5))
+        # --- SECCIÓN 1 (Exterior) ---
+        lbl_sec1 = ctk.CTkLabel(self.scroll_actual, text="🌎 ENTORNO EXTERIOR", font=("Arial", 12, "bold"), text_color="gray", anchor="w")
+        lbl_sec1.pack(fill="x", padx=25, pady=(15, 0))
+
+        self.weather_container = ctk.CTkFrame(self.scroll_actual, fg_color="transparent")
+        self.weather_container.pack(fill="x", padx=15, pady=(5, 5))
+        self.weather_container.grid_columnconfigure(0, weight=1)
+        self.weather_container.grid_columnconfigure(1, weight=1)
 
         # Recuadro Izquierdo (Pronóstico - Altura Uniforme)
-        self.forecast_frame = ctk.CTkFrame(self.weather_container, fg_color=bg_card, corner_radius=15, border_width=2, border_color="#3498db")
-        self.forecast_frame.pack(side="left", padx=10, fill="y")
+        self.forecast_frame = ctk.CTkFrame(self.weather_container, fg_color=bg_card, corner_radius=15, border_width=2, border_color="#3498db", height=100)
+        self.forecast_frame.grid(row=0, column=0, padx=(0, 10), sticky="nsew")
+        self.forecast_frame.grid_propagate(False)
+        
+        lbl_pronostico_title = ctk.CTkLabel(self.forecast_frame, text="PRONÓSTICO CLIMÁTICO", font=("Arial", 11, "bold"), text_color="#3498db", anchor="w")
+        lbl_pronostico_title.pack(fill="x", padx=15, pady=(10, 0))
         
         self.pronostico_label = ctk.CTkLabel(
             self.forecast_frame,
             text="Cargando pronóstico del clima...",
             font=("Roboto", 14, "bold"),
             justify="left",
-            anchor="w",
+            anchor="nw",
             text_color=("#2c3e50", "#3498db"),
-            height=55
+            wraplength=400
         )
-        self.pronostico_label.pack(padx=15, pady=12)
+        self.pronostico_label.pack(padx=15, pady=(5, 12), fill="both", expand=True)
         
         # Recuadro Derecho (Sensores Externos - Altura Uniforme)
-        self.ext_weather_frame = ctk.CTkFrame(self.weather_container, fg_color=bg_card, corner_radius=15, border_width=2, border_color="#e67e22")
-        self.ext_weather_frame.pack(side="left", padx=10, fill="y")
+        self.ext_weather_frame = ctk.CTkFrame(self.weather_container, fg_color=bg_card, corner_radius=15, border_width=2, border_color="#e67e22", height=100)
+        self.ext_weather_frame.grid(row=0, column=1, padx=(10, 0), sticky="nsew")
+        self.ext_weather_frame.grid_propagate(False)
         
+        lbl_ext_title = ctk.CTkLabel(self.ext_weather_frame, text="SENSORES EXTERIORES", font=("Arial", 11, "bold"), text_color="#e67e22", anchor="center")
+        lbl_ext_title.pack(fill="x", padx=15, pady=(10, 0))
+
         self.lbl_ext_temp = ctk.CTkLabel(
             self.ext_weather_frame,
             text="🌡️ Ext: -- °C | 💧 Hum: -- %",
             font=("Roboto", 14, "bold"),
             text_color="#e67e22",
-            height=0
+            anchor="center"
         )
-        self.lbl_ext_temp.pack(padx=15, pady=10, anchor="center")
+        self.lbl_ext_temp.pack(padx=15, pady=(5, 12), fill="both", expand=True)
 
-        def create_card(row, col, title, info_text):
-            card = ctk.CTkFrame(self.tab_actual, fg_color=bg_card, corner_radius=15, border_width=2, border_color="#3b3b3b")
-            card.grid(row=row, column=col, padx=15, pady=15, sticky="nsew")
+        def create_card(parent, row, col, title, info_text):
+            card = ctk.CTkFrame(parent, fg_color=bg_card, corner_radius=15, border_width=2, border_color="#3b3b3b", height=140)
+            card.grid(row=row, column=col, padx=10, pady=10, sticky="nsew")
+            card.grid_propagate(False)
             
-            lbl_title = ctk.CTkLabel(card, text=title.upper(), font=("Roboto", 11, "bold"), text_color="gray")
-            lbl_title.place(x=20, y=10)
+            # Header container
+            header = ctk.CTkFrame(card, fg_color="transparent")
+            header.pack(fill="x", padx=10, pady=(10, 0))
             
-            btn_info = ctk.CTkButton(card, text="ⓘ", width=25, height=25, corner_radius=12, fg_color="transparent", text_color="gray", hover_color="#3b3b3b",
+            lbl_title = ctk.CTkLabel(header, text=title.upper(), font=("Roboto", 11, "bold"), text_color="gray", anchor="w")
+            lbl_title.pack(side="left", padx=(10, 0))
+            
+            btn_info = ctk.CTkButton(header, text="ⓘ", width=25, height=25, corner_radius=12, fg_color="transparent", text_color="gray", hover_color="#3b3b3b",
                                      command=lambda: self.show_popup(title, info_text))
-            btn_info.place(relx=0.95, y=10, anchor="ne")
+            btn_info.pack(side="right")
             ToolTip(btn_info, "Info")
             
-            lbl_val = ctk.CTkLabel(card, text="--", font=("Roboto", 28, "bold"))
-            lbl_val.place(x=20, rely=0.55, anchor="w")
+            # Content container
+            content = ctk.CTkFrame(card, fg_color="transparent")
+            content.pack(fill="both", expand=True, padx=10, pady=(5, 10))
+            content.grid_columnconfigure(0, weight=1)
+            content.grid_columnconfigure(1, weight=0)
             
-            cv = tk.Canvas(card, width=80, height=100, bg=bg_canvas, highlightthickness=0)
-            cv.place(relx=0.85, rely=0.55, anchor="center")
+            lbl_val = ctk.CTkLabel(content, text="--", font=("Roboto", 24, "bold"), anchor="w", justify="left", wraplength=120)
+            lbl_val.grid(row=0, column=0, sticky="w", padx=(10, 0))
+            
+            cv = tk.Canvas(content, width=80, height=80, bg=bg_canvas, highlightthickness=0)
+            cv.grid(row=0, column=1, sticky="e", padx=(0, 10))
             
             return card, lbl_val, cv
 
-        # Crear 6 tarjetas en matriz 3x2, desplazadas hacia abajo por el banner
-        self.card_t, self.lbl_t_val, self.cv_temp = create_card(1, 0, "Temperatura", "Física: Sube de día por radiación. Baja de noche hacia 15°C. Valores ideales: 15°C a 28°C.")
-        self.card_h, self.lbl_h_val, self.cv_hum = create_card(2, 0, "Humedad", "Física: Baja (se evapora) cuando la temperatura sube. Sube al enfriar. Ideal: 40% a 80%.")
-        self.card_luz, self.lbl_luz_val, self.cv_luz = create_card(3, 0, "Luminosidad", "Motor Climático: Solar de 6am-6pm (según clima: Soleado, Nublado, Frío). De noche es 0.")
+        # --- SECCIÓN 2 (Interior) ---
+        lbl_sec2 = ctk.CTkLabel(self.scroll_actual, text="🌿 SENSORES INTERIORES DEL INVERNADERO", font=("Arial", 12, "bold"), text_color="gray", anchor="w")
+        lbl_sec2.pack(fill="x", padx=25, pady=(15, 0))
+
+        self.interior_container = ctk.CTkFrame(self.scroll_actual, fg_color="transparent")
+        self.interior_container.pack(fill="x", padx=15, pady=(5, 5))
+        self.interior_container.grid_columnconfigure((0, 1, 2), weight=1)
+
+        self.card_t, self.lbl_t_val, self.cv_temp = create_card(self.interior_container, 0, 0, "Temperatura", "Física: Sube de día por radiación. Baja de noche hacia 15°C.\nAzul: < 15°C | Verde: 15°C a 28°C | Rojo: > 28°C")
+        self.card_h, self.lbl_h_val, self.cv_hum = create_card(self.interior_container, 0, 1, "Humedad", "Física: Baja (se evapora) cuando la temperatura sube. Sube con frío.\nAmarillo: < 40% | Azul: 40% a 80% | Rojo: > 80%")
+        self.card_luz, self.lbl_luz_val, self.cv_luz = create_card(self.interior_container, 0, 2, "Luminosidad", "Agronomía: Rango de luz útil para la fotosíntesis.\nGris: < 1,000 Lx | Amarillo: 1,001 Lx a 45,000 Lx | Rojo: > 45,000 Lx")
         
-        self.card_v, self.lbl_v_val, self.cv_vent = create_card(1, 1, "Ventilador / Extractor", "Termodinámica: Extrae aire caliente si Temp > 25°C. Apagado estricto si Temp < 18°C para conservar calor.")
-        self.card_r, self.lbl_r_val, self.cv_riego = create_card(2, 1, "Bomba de Riego", "Agronomía (Humedece): ON si Humedad < 50%. OFF si Humedad >= 70%. Ignora el frío.")
-        self.card_il, self.lbl_il_val, self.cv_ilum = create_card(3, 1, "Iluminación LED", "Agronomía (Suplemento): ON para compensar si Luz < 6,000 Lux. Aporta máx 10,000 Lux.")
-        self.card_calef, self.lbl_calef_val, self.cv_calef = create_card(4, 1, "Calefacción", "Control Proporcional: Se enciende si T < 18°C. Potencia proporcional al frío.")
+        # --- SECCIÓN 3 (Actuadores) ---
+        lbl_sec3 = ctk.CTkLabel(self.scroll_actual, text="⚙️ ACTUADORES", font=("Arial", 12, "bold"), text_color="gray", anchor="w")
+        lbl_sec3.pack(fill="x", padx=25, pady=(15, 0))
+
+        def create_actuator_card(parent, col, title, info_text):
+            """Tarjeta de actuador con icono + gauge circular agrupados y centrados."""
+            # ── Variables de diseño ── Modifica SOLO estas para escalar la tarjeta ──
+            icon_size       = 80   # ancho y alto del canvas del icono animado (px)
+            gauge_size      = 90   # ancho y alto del canvas del gauge circular (px)
+            espacio_interno = 16   # padding horizontal entre icono y gauge (px)
+            # ────────────────────────────────────────────────────────────────────────
+
+            card_h = 40 + max(icon_size, gauge_size + 22) + 20  # altura dinámica
+            card = ctk.CTkFrame(parent, fg_color=bg_card, corner_radius=15,
+                                border_width=2, border_color="#3b3b3b", height=card_h)
+            card.grid(row=0, column=col, padx=10, pady=10, sticky="nsew")
+            card.grid_propagate(False)
+
+            # ── Cabecera ─────────────────────────────────────────────────────────
+            header = ctk.CTkFrame(card, fg_color="transparent")
+            header.pack(fill="x", padx=10, pady=(10, 0))
+            
+            # Botón de info a la derecha
+            ctk.CTkButton(header, text="ⓘ", width=25, height=25, corner_radius=12,
+                          fg_color="transparent", text_color="gray", hover_color="#3b3b3b",
+                          command=lambda: self.show_popup(title, info_text)).pack(side="right")
+            
+            # Título centrado (con padding izquierdo compensatorio para equilibrar el botón de la derecha)
+            ctk.CTkLabel(header, text=title.upper(), font=("Roboto", 10, "bold"),
+                         text_color="gray", anchor="center").pack(fill="x", expand=True, padx=(25, 0))
+
+            # ── Contenedor central: icono + gauge como una unidad visual ─────────
+            centro = ctk.CTkFrame(card, fg_color="transparent")
+            centro.pack(expand=True, pady=(0, 8))   # se centra vertical y horizontalmente, ligeramente desplazado arriba
+
+            # Canvas del icono animado (izquierda)
+            cv_icon = tk.Canvas(centro, width=icon_size, height=icon_size,
+                                bg=bg_canvas, highlightthickness=0)
+            cv_icon.pack(side="left", padx=(0, espacio_interno))
+
+            # Sub-frame derecho: gauge arriba + estado debajo
+            derecha = ctk.CTkFrame(centro, fg_color="transparent")
+            derecha.pack(side="left")
+
+            cv_gauge = tk.Canvas(derecha, width=gauge_size, height=gauge_size,
+                                 bg=bg_canvas, highlightthickness=0)
+            cv_gauge.pack()
+
+            lbl_val = ctk.CTkLabel(derecha, text="--", font=("Roboto", 12, "bold"),
+                                   anchor="center", wraplength=gauge_size)
+            lbl_val.pack(pady=(2, 0))
+
+            return card, lbl_val, cv_icon, cv_gauge
+
+        self.actuadores_container = ctk.CTkFrame(self.scroll_actual, fg_color="transparent")
+        self.actuadores_container.pack(fill="x", padx=15, pady=(5, 15))
+        # Fila 0: 3 columnas con peso 1 (Ventilador, Aspersores, Iluminación LED)
+        self.actuadores_container.grid_columnconfigure((0, 1, 2), weight=1)
+        # Fila 1: simulamos 2 tarjetas centradas con relleno lateral
+        self.actuadores_container.grid_columnconfigure(3, weight=1)
+
+        self.card_v,     self.lbl_v_val,     self.cv_vent,  self.gauge_v     = create_actuator_card(self.actuadores_container, 0, "Ventilador",     "Termodinámica: Sistema Pad & Fan.\nON normal: 27°C | OFF normal: 24.5°C\nCon Malla Desplegada: ON 33°C | OFF 26°C")
+        self.card_r,     self.lbl_r_val,     self.cv_riego, self.gauge_r     = create_actuator_card(self.actuadores_container, 1, "Aspersores",     "Agronomía (Humedece): ON si Humedad < 45%. OFF si Humedad >= 63%.\nTiene seguro de frío para no ahogar la planta.")
+        self.card_il,    self.lbl_il_val,    self.cv_ilum,  self.gauge_il    = create_actuator_card(self.actuadores_container, 2, "Iluminación LED", "Agronomía (Suplemento): Compensa sombra solar de forma dinámica con Histéresis según la etapa.\n⚠️ APAGADO de noche para descanso celular.")
+        self.card_calef, self.lbl_calef_val, self.cv_calef, self.gauge_calef = create_actuator_card(self.actuadores_container, 3, "Calefacción",    "Control Proporcional PID: Se enciende suavemente si T < 22°C para evitar caídas bruscas en heladas.")
+
+        # ── Tarjeta especial: PANTALLA TÉRMICA (fila 1, sin gauge, 2 columnas centradas) ──
+        # Usamos una sub-fila: ponemos la 5ta tarjeta centrada occupando col 1 y 2 de una segunda fila
+        def create_thermal_card(parent):
+            """Tarjeta de Pantalla Térmica sin gauge circular (estado ON/OFF visual)."""
+            card = ctk.CTkFrame(parent, fg_color=bg_card, corner_radius=15,
+                                border_width=2, border_color="#3b3b3b", height=180)
+            card.grid(row=1, column=0, columnspan=4, padx=120, pady=(0, 10), sticky="ew")
+            card.grid_propagate(False)
+            card.grid_columnconfigure(0, weight=1)
+            card.grid_columnconfigure(1, weight=0)
+            card.grid_columnconfigure(2, weight=1)
+
+            # Cabecera
+            header = ctk.CTkFrame(card, fg_color="transparent")
+            header.pack(fill="x", padx=10, pady=(10, 0))
+            ctk.CTkButton(header, text="ⓘ", width=25, height=25, corner_radius=12,
+                          fg_color="transparent", text_color="gray", hover_color="#3b3b3b",
+                          command=lambda: self.show_popup(
+                              "PANTALLA TÉRMICA",
+                              "FUNCIÓN: Reduce radiación térmica 85% y lumínica 75%.\n"
+                              "DESPLIEGUE: Preventivo si Temp > 27°C y Luz > 30,000 Lx.\n"
+                              "RETRACCIÓN: Si Temp < 24°C o baja la luz (< 15,000 Lx)."
+                          )).pack(side="right")
+            ctk.CTkLabel(header, text="PANTALLA TÉRMICA", font=("Roboto", 10, "bold"),
+                         text_color="gray", anchor="center").pack(fill="x", expand=True, padx=(25, 0))
+
+            # Contenedor central
+            centro = ctk.CTkFrame(card, fg_color="transparent")
+            centro.pack(expand=True, pady=(0, 8))
+
+            # Canvas de la silueta de la malla
+            cv_malla = tk.Canvas(centro, width=100, height=80,
+                                 bg=bg_canvas, highlightthickness=0)
+            cv_malla.pack(side="left", padx=(0, 20))
+
+            # Estado a la derecha del canvas
+            lbl_malla_val = ctk.CTkLabel(centro, text="PLEGADA", font=("Roboto", 14, "bold"),
+                                         text_color="#95a5a6", anchor="center", wraplength=120)
+            lbl_malla_val.pack(side="left")
+
+            return card, lbl_malla_val, cv_malla
+
+        self.card_malla, self.lbl_malla_val, self.cv_malla = create_thermal_card(self.actuadores_container)
 
         self.calef_potencia = 0.0
+        self.malla_desplegada_prev = False  # Detectar cambios de estado para la animación de transición
 
         # Inicializar gotas de riego (x, y, dx, dy)
         self.riego_drops = []
         for _ in range(15):
             self.riego_drops.append([40, 65, random.uniform(-4, 4), random.uniform(-6, -2)])
 
+    # ─────────────────────────────────────────────────────────────────────────
+    def draw_gauge(self, cv, pct, color_on):
+        """Gauge circular de 280°: track gris + arco de progreso + % centrado."""
+        cv.delete("all")
+        W = int(cv.cget("width"))
+        H = int(cv.cget("height"))
+        cx, cy = W // 2, H // 2
+        r      = min(cx, cy) - 5   # radio → aprovecha el 90% del canvas
+        TRACK  = "#444444"
+        START, SPAN = 220, -280
+
+        # Track gris de fondo
+        cv.create_arc(cx-r, cy-r, cx+r, cy+r,
+                      start=START, extent=SPAN,
+                      outline=TRACK, width=11, style="arc")
+        # Arco de progreso coloreado
+        if pct > 0:
+            cv.create_arc(cx-r, cy-r, cx+r, cy+r,
+                          start=START, extent=SPAN*(min(pct, 100)/100.0),
+                          outline=color_on, width=11, style="arc")
+        # Porcentaje centrado — fuente proporcional al tamaño del canvas
+        font_size = max(10, W // 6)
+        cv.create_text(cx, cy, text=f"{pct:.0f}%",
+                       font=("Helvetica", font_size, "bold"),
+                       fill=color_on if pct > 0 else TRACK, anchor="center")
+
     def draw_temp(self, t):
         self.cv_temp.delete("all")
         color = "#3498db" if t < 15 else "#2ecc71" if t <= 28 else "#e74c3c"
         
-        self.cv_temp.create_oval(30, 70, 50, 90, outline="#bdc3c7", width=2) 
-        self.cv_temp.create_line(35, 72, 35, 20, fill="#bdc3c7", width=2) 
-        self.cv_temp.create_line(45, 72, 45, 20, fill="#bdc3c7", width=2) 
-        self.cv_temp.create_arc(35, 15, 45, 25, start=0, extent=180, outline="#bdc3c7", width=2) 
+        self.cv_temp.create_oval(25, 52, 45, 72, outline="#bdc3c7", width=2) 
+        self.cv_temp.create_line(30, 54, 30, 5, fill="#bdc3c7", width=2) 
+        self.cv_temp.create_line(40, 54, 40, 5, fill="#bdc3c7", width=2) 
+        self.cv_temp.create_arc(30, 0, 40, 10, start=0, extent=180, outline="#bdc3c7", width=2) 
         
         fill_h = min(max((t / 50.0) * 50, 0), 50)
-        self.cv_temp.create_oval(32, 72, 48, 88, fill=color, outline="") 
+        self.cv_temp.create_oval(27, 54, 43, 70, fill=color, outline="") 
         if fill_h > 0:
-            self.cv_temp.create_rectangle(36, 75 - fill_h, 44, 75, fill=color, outline="") 
+            self.cv_temp.create_rectangle(31, 57 - fill_h, 39, 57, fill=color, outline="") 
 
     def draw_hum(self, h):
         self.cv_hum.delete("all")
@@ -276,17 +531,18 @@ class VentanaInvernadero:
 
     def draw_luz(self, luz):
         self.cv_luz.delete("all")
-        color = "#95a5a6" if luz < 2000 else "#f1c40f" if luz <= 8500 else "#e74c3c"
+        # Gris: sin luz útil (<1000), Amarillo: fotosíntesis óptima (1001-45000), Rojo: fotoinhibición (>45000)
+        color = "#95a5a6" if luz < 1000 else "#f1c40f" if luz <= 45000 else "#e74c3c"
         
-        self.cv_luz.create_oval(30, 40, 50, 60, fill=color, outline="")
+        self.cv_luz.create_oval(20, 30, 40, 50, fill=color, outline="")
         
         num_rays = int(min((luz / 10000.0) * 12, 12))
         for i in range(num_rays):
             angle = math.radians(i * (360/12))
-            x1 = 40 + 15 * math.cos(angle)
-            y1 = 50 + 15 * math.sin(angle)
-            x2 = 40 + 25 * math.cos(angle)
-            y2 = 50 + 25 * math.sin(angle)
+            x1 = 30 + 15 * math.cos(angle)
+            y1 = 40 + 15 * math.sin(angle)
+            x2 = 30 + 25 * math.cos(angle)
+            y2 = 40 + 25 * math.sin(angle)
             self.cv_luz.create_line(x1, y1, x2, y2, fill=color, width=3)
 
     def animar_actuadores(self):
@@ -299,8 +555,8 @@ class VentanaInvernadero:
         else:
             color_v = "#7f8c8d"
             
-        self.cv_vent.create_oval(15, 25, 65, 75, outline="#bdc3c7", width=2)
-        cx, cy, r = 40, 50, 22
+        self.cv_vent.create_oval(5, 15, 55, 65, outline="#bdc3c7", width=2)
+        cx, cy, r = 30, 40, 22
         for i in range(4):
             angle = math.radians(self.vent_angle + i * 90)
             x = cx + r * math.cos(angle)
@@ -308,41 +564,41 @@ class VentanaInvernadero:
             self.cv_vent.create_line(cx, cy, x, y, width=8, fill=color_v)
         self.cv_vent.create_oval(cx-5, cy-5, cx+5, cy+5, fill="#ecf0f1", outline="")
 
-        # Riego (Aspersor)
+        # Aspersores
         self.cv_riego.delete("all")
-        self.cv_riego.create_rectangle(35, 70, 45, 90, fill="#7f8c8d", outline="")
-        self.cv_riego.create_oval(30, 65, 50, 75, fill="#bdc3c7", outline="")
+        self.cv_riego.create_rectangle(25, 40, 35, 60, fill="#7f8c8d", outline="")
+        self.cv_riego.create_oval(20, 35, 40, 45, fill="#bdc3c7", outline="")
         if self.riego_state:
             for i in range(len(self.riego_drops)):
                 x, y, dx, dy = self.riego_drops[i]
                 dy += 0.5 # gravedad
                 x += dx
                 y += dy
-                if y > 100 or x < 0 or x > 80:
-                    x, y = 40, 65
+                if y > 80 or x < 0 or x > 80:
+                    x, y = 30, 35
                     dx = random.uniform(-4, 4)
                     dy = random.uniform(-6, -2)
                 self.cv_riego.create_oval(x-2, y-2, x+2, y+2, fill="#3498db", outline="")
                 self.riego_drops[i] = [x, y, dx, dy]
 
-        # Iluminación
+        # Iluminación LED
         self.cv_ilum.delete("all")
         if self.ilum_intensity > 0:
             halo_r = 15 + (self.ilum_intensity / 100.0) * 15
-            self.cv_ilum.create_oval(40-halo_r, 45-halo_r, 40+halo_r, 45+halo_r, fill="#fef0cd", outline="")
+            self.cv_ilum.create_oval(30-halo_r, 35-halo_r, 30+halo_r, 35+halo_r, fill="#fef0cd", outline="")
             
         bulb_color = "#f39c12" if self.ilum_intensity > 0 else "#7f8c8d"
-        self.cv_ilum.create_oval(25, 25, 55, 55, fill=bulb_color, outline="")
-        self.cv_ilum.create_rectangle(32, 50, 48, 70, fill="#95a5a6", outline="")
-        self.cv_ilum.create_line(35, 70, 45, 70, fill="#bdc3c7", width=3)
-        self.cv_ilum.create_line(40, 25, 40, 45, fill="#f1c40f", width=2) # Filamento
+        self.cv_ilum.create_oval(15, 15, 45, 45, fill=bulb_color, outline="")
+        self.cv_ilum.create_rectangle(22, 40, 38, 60, fill="#95a5a6", outline="")
+        self.cv_ilum.create_line(25, 60, 35, 60, fill="#bdc3c7", width=3)
+        self.cv_ilum.create_line(30, 15, 30, 35, fill="#f1c40f", width=2) # Filamento
 
         # Calefacción
         self.cv_calef.delete("all")
-        self.cv_calef.create_rectangle(20, 25, 60, 75, outline="#7f8c8d", width=2, fill="")
+        self.cv_calef.create_rectangle(10, 15, 50, 65, outline="#7f8c8d", width=2, fill="")
         
         for i in range(3):
-            y_base = 35 + i * 15
+            y_base = 25 + i * 15
             if self.calef_potencia > 0:
                 # Interpolamos el color de gris oscuro a rojo brillante incandescente
                 r_val = int(127 + (255 - 127) * (self.calef_potencia / 100.0))
@@ -351,11 +607,22 @@ class VentanaInvernadero:
                 color_resistencia = f"#{r_val:02x}{g_val:02x}{b_val:02x}"
                 # Añadir un halo de calor aleatorio
                 if random.random() < (self.calef_potencia / 100.0):
-                    self.cv_calef.create_line(25, y_base, 55, y_base, fill="#e74c3c", width=6, capstyle="round")
+                    self.cv_calef.create_line(15, y_base, 45, y_base, fill="#e74c3c", width=6, capstyle="round")
             else:
                 color_resistencia = "#7f8c8d"
             
-            self.cv_calef.create_line(25, y_base, 55, y_base, fill=color_resistencia, width=4, capstyle="round")
+            self.cv_calef.create_line(15, y_base, 45, y_base, fill=color_resistencia, width=4, capstyle="round")
+
+        # Pantalla Térmica (Animación lenta y fluida)
+        malla_activa = getattr(self, 'ctrl', None) and self.ctrl.malla_desplegada
+        target_malla = 100.0 if malla_activa else 0.0
+        
+        if self.malla_anim_pct < target_malla:
+            self.malla_anim_pct = min(100.0, self.malla_anim_pct + 4.0)
+        elif self.malla_anim_pct > target_malla:
+            self.malla_anim_pct = max(0.0, self.malla_anim_pct - 4.0)
+            
+        self.draw_malla(self.malla_anim_pct)
 
         # Motor de Planta (Interpolación fluida)
         if self.crecimiento_display < self.crecimiento_target:
@@ -373,6 +640,51 @@ class VentanaInvernadero:
         self.dibujar_planta(self.crecimiento_display, current_plant_color, getattr(self, 'clima_actual', 'Soleado'))
 
         self.root.after(50, self.animar_actuadores)
+
+    def draw_malla(self, pct):
+        """Dibuja el icono de la Pantalla Térmica: animación vertical fluida según porcentaje (0 a 100)."""
+        self.cv_malla.delete("all")
+        W, H = 100, 80
+        color_lamas = "#f39c12" if pct > 0 else "#7f8c8d"
+        color_carril = "#bdc3c7"
+
+        # Rieles laterales
+        self.cv_malla.create_rectangle(8, 5, 13, H - 5, fill=color_carril, outline="")
+        self.cv_malla.create_rectangle(W - 13, 5, W - 8, H - 5, fill=color_carril, outline="")
+
+        # Tubo superior enrollador
+        self.cv_malla.create_rectangle(8, 5, W - 8, 16, fill=color_carril, outline="", width=0)
+        self.cv_malla.create_oval(8, 3, 20, 15, fill="#95a5a6", outline="")
+        self.cv_malla.create_oval(W - 20, 3, W - 8, 15, fill="#95a5a6", outline="")
+
+        if pct > 0:
+            num_lamas = 6
+            alto_total_lamas = H - 20
+            # Altura actual basada en el porcentaje
+            altura_actual = alto_total_lamas * (pct / 100.0)
+            alto_lama = alto_total_lamas / num_lamas
+            
+            for i in range(num_lamas):
+                y0 = 16 + i * alto_lama
+                y1 = y0 + alto_lama - 2
+                
+                # Solo dibujar completamente si la lama entra en la altura animada
+                if y1 <= 16 + altura_actual:
+                    self.cv_malla.create_rectangle(13, y0, W - 13, y1, fill=color_lamas, outline="")
+                    self.cv_malla.create_line(13, y1, W - 13, y1, fill="#c0392b", width=1)
+                elif y0 < 16 + altura_actual:
+                    # Lama parcial cortada (creando la ilusión de que baja suavemente)
+                    self.cv_malla.create_rectangle(13, y0, W - 13, 16 + altura_actual, fill=color_lamas, outline="")
+                    self.cv_malla.create_line(13, 16 + altura_actual, W - 13, 16 + altura_actual, fill="#c0392b", width=1)
+
+            if pct == 100.0:
+                self.cv_malla.create_text(W // 2, H - 6, text="▼ 25%", font=("Helvetica", 7, "bold"), fill="#f39c12")
+            else:
+                self.cv_malla.create_text(W // 2, H // 2 + 8, text=f"{int(pct)}%", font=("Helvetica", 8), fill="#f39c12")
+        else:
+            # Solo la pantalla enrollada en el tubo (plegada al 0%)
+            self.cv_malla.create_rectangle(13, 5, W - 13, 16, fill="#95a5a6", outline="")
+            self.cv_malla.create_text(W // 2, H // 2 + 8, text="PLEGADA", font=("Helvetica", 8), fill="#7f8c8d")
 
     def dibujar_planta(self, crecimiento, color_hojas, clima_actual="Soleado"):
         self.cv_planta.delete("all")
@@ -896,6 +1208,7 @@ class VentanaInvernadero:
         self.cv_riego.configure(bg=canvas_bg)
         self.cv_ilum.configure(bg=canvas_bg)
         self.cv_calef.configure(bg=canvas_bg)
+        self.cv_malla.configure(bg=canvas_bg)
         
         cv_planta_bg = "#1A1D26" if self.switch_var.get() == "dark" else canvas_bg
         self.cv_planta.configure(bg=cv_planta_bg)
@@ -952,7 +1265,8 @@ class VentanaInvernadero:
     def actualizar(self):
         """Ciclo principal de UI: Obtiene datos del controlador y actualiza GUI/Gráfica."""
         resultado = self.ctrl.procesar()
-        hora_actual, t, h, luz, v, r, intensidad_luz, calef_on, calef_pot, crecimiento, alerta, pronostico, t_ext, h_ext, esfuerzo_v, esfuerzo_r, esfuerzo_il, esfuerzo_c = resultado
+        hora_actual, t, h, luz, v, r, intensidad_luz, calef_on, calef_pot, crecimiento, alerta, pronostico, t_ext, h_ext, esfuerzo_v, esfuerzo_r, esfuerzo_il, esfuerzo_c, estado_fotoperiodo = resultado
+        self.estado_fotoperiodo = estado_fotoperiodo
         
         # Extraer el clima actual del pronóstico para la animación gráfica
         self.clima_actual = "Soleado"
@@ -976,17 +1290,26 @@ class VentanaInvernadero:
         self.pronostico_label.configure(text=pronostico)
         self.lbl_ext_temp.configure(text=f"🌡️ Ext: {t_ext:.1f} °C | 💧 Hum: {h_ext:.1f} %")
         
-        # Estado Solar Dinámico para el Encabezado
+        # Estado Solar Dinámico: muestra el clima real con emoji y temperatura exterior
         hora = hora_actual.hour
-        if 6 <= hora < 12:
-            estado_solar = "Día (Mañana - Radiación activa)"
-            color_solar = "#f39c12"  # Dorado elegante
-        elif 12 <= hora < 18:
-            estado_solar = "Día (Medio día - Máxima radiación solar)"
-            color_solar = "#d35400"  # Naranja terracota elegante
+        clima_actual = self.ctrl.motor_clima.estado_actual
+
+        iconos_clima = {
+            "Soleado":    ("☀️", "#f39c12"),
+            "Nublado":    ("☁️", "#95a5a6"),
+            "Día Opaco":  ("🌫️", "#7f8c8d"),
+            "Lluvia":     ("🌧️", "#2980b9"),
+            "Tormenta":   ("⛈️", "#8e44ad"),
+            "Frío":       ("❄️", "#3498db"),
+            "Despejado":  ("🌙", "#2c3e50"),
+        }
+        emoji, color_solar = iconos_clima.get(clima_actual, ("🌡️", "#bdc3c7"))
+
+        if 6 <= hora < 18:
+            periodo = "Mañana" if hora < 12 else "Tarde"
+            estado_solar = f"{emoji} {clima_actual} · {periodo} · {t_ext:.1f}°C ext."
         else:
-            estado_solar = "Noche (Sin radiación solar)"
-            color_solar = "#2980b9"  # Azul oscuro elegante
+            estado_solar = f"{emoji} {clima_actual} · Noche · {t_ext:.1f}°C ext."
             
         self.estado_solar_label.configure(text=estado_solar, text_color=color_solar)
         
@@ -1008,43 +1331,76 @@ class VentanaInvernadero:
         self.card_h.configure(border_color=h_color)
         self.draw_hum(h)
         
-        # Luz logic
-        if luz < 2000: luz_color = "#95a5a6"
-        elif luz <= 8500: luz_color = "#f1c40f"
+        # Luz logic — Umbrales agronómicos correctos:
+        # Gris: sin luz útil (<1000 Lx) | Amarillo: fotosíntesis óptima (1001-45000 Lx) | Rojo: fotoinhibición (>45000 Lx)
+        if luz < 1000: luz_color = "#95a5a6"
+        elif luz <= 45000: luz_color = "#f1c40f"
         else: luz_color = "#e74c3c"
             
         self.lbl_luz_val.configure(text=f"{luz:.0f} Lx", text_color=luz_color)
         self.card_luz.configure(border_color=luz_color)
         self.draw_luz(luz)
 
-        # Actuators
-        self.vent_state = v
-        self.riego_state = r
-        self.ilum_intensity = intensidad_luz
-        
-        v_color = "#2ecc71" if v else "#3b3b3b"
-        estado_v = "ON" if v else "OFF"
-        self.lbl_v_val.configure(text=f"{estado_v} (Ciclo: {esfuerzo_v:.0f}%)", text_color=v_color if v else "gray")
-        self.card_v.configure(border_color=v_color)
-        
-        r_color = "#3498db" if r else "#3b3b3b"
-        estado_r = "ON" if r else "OFF"
-        self.lbl_r_val.configure(text=f"{estado_r} (Ciclo: {esfuerzo_r:.0f}%)", text_color=r_color if r else "gray")
-        self.card_r.configure(border_color=r_color)
-        
-        il_color = "#f39c12" if intensidad_luz > 0 else "#3b3b3b"
-        estado_il = "ON" if intensidad_luz > 0 else "OFF"
-        self.lbl_il_val.configure(text=f"{estado_il} (Ciclo: {esfuerzo_il:.0f}%)", text_color=il_color if intensidad_luz > 0 else "gray")
-        self.card_il.configure(border_color=il_color)
-        
-        # Calefacción logic
-        self.calef_potencia = calef_pot
-        c_color = "#e74c3c" if calef_on else "#3b3b3b"
-        estado_c = "ON" if calef_on else "OFF"
-        self.lbl_calef_val.configure(text=f"{estado_c} (Ciclo: {esfuerzo_c:.0f}%)", text_color=c_color if calef_on else "gray")
-        self.card_calef.configure(border_color=c_color)
+        # Actuadores
+        self.vent_state      = v
+        self.riego_state     = r
+        self.ilum_intensity  = intensidad_luz
 
-        # Gráficas
+        # ── Ventilador ───────────────────────────────────────────────────────
+        v_color = "#2ecc71" if v else "#95a5a6"
+        self.lbl_v_val.configure(text="ON" if v else "OFF",
+                                 text_color=v_color)
+        self.card_v.configure(border_color=v_color)
+        self.draw_gauge(self.gauge_v, esfuerzo_v if v else 0, v_color)
+
+        # ── Aspersores ───────────────────────────────────────────────────────
+        r_color = "#3498db" if r else "#95a5a6"
+        self.lbl_r_val.configure(text="ON" if r else "OFF",
+                                 text_color=r_color)
+        self.card_r.configure(border_color=r_color)
+        self.draw_gauge(self.gauge_r, esfuerzo_r if r else 0, r_color)
+
+        # ── Iluminación LED ──────────────────────────────────────────────────
+        if estado_fotoperiodo:
+            il_color = "#9b59b6"
+            il_text  = "Descanso"
+            il_pct   = 0
+        elif intensidad_luz > 0:
+            il_color = "#f39c12"
+            il_text  = "ON"
+            il_pct   = esfuerzo_il
+        else:
+            il_color = "#95a5a6"
+            il_text  = "OFF"
+            il_pct   = 0
+        self.lbl_il_val.configure(text=il_text, text_color=il_color)
+        self.card_il.configure(border_color=il_color)
+        self.draw_gauge(self.gauge_il, il_pct, il_color)
+
+        # ── Calefacción ──────────────────────────────────────────────────────
+        self.calef_potencia = calef_pot
+        c_color = "#e74c3c" if calef_on else "#95a5a6"
+        self.lbl_calef_val.configure(text="ON" if calef_on else "OFF",
+                                     text_color=c_color)
+        self.card_calef.configure(border_color=c_color)
+        self.draw_gauge(self.gauge_calef, esfuerzo_c if calef_on else 0, c_color)
+
+        # ── Pantalla Térmica (Malla de Sombreo) ──────────────────────────────
+        malla_on = self.ctrl.malla_desplegada
+        if malla_on != self.malla_desplegada_prev:
+            # Estado en transición: mostrar texto animado por 1.5 segundos
+            trans_text = "DESPLEGANDO..." if malla_on else "RETRAYENDO..."
+            trans_color = "#f39c12" if malla_on else "#bdc3c7"
+            self.lbl_malla_val.configure(text=trans_text, text_color=trans_color)
+            self.malla_desplegada_prev = malla_on
+            self.root.after(1500, lambda m=malla_on: self.lbl_malla_val.configure(
+                text="DESPLEGADA" if m else "PLEGADA",
+                text_color="#2ecc71" if m else "#95a5a6"
+            ))
+        malla_border = "#f39c12" if malla_on else "#3b3b3b"
+        self.card_malla.configure(border_color=malla_border)
+
+
         try:
             self.counter += 1
             self.time_data.append(self.counter)
