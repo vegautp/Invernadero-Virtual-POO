@@ -89,6 +89,8 @@ class VentanaInvernadero:
 
         self.animar_actuadores()
         self.actualizar()
+        self._tick_reloj()  # Loop de reloj independiente, 1 seg
+
 
     def setup_header(self):
         self.header_frame = ctk.CTkFrame(self.root, fg_color="transparent")
@@ -1029,99 +1031,129 @@ class VentanaInvernadero:
 
         self.lbl_total_reg = create_stat_card(resumen_frame, "TOTAL REGISTROS", 0)
         self.lbl_temp_prom = create_stat_card(resumen_frame, "TEMP. PROMEDIO", 1)
-        self.lbl_hum_prom = create_stat_card(resumen_frame, "HUM. PROMEDIO", 2)
-        self.lbl_luz_prom = create_stat_card(resumen_frame, "LUZ PROM (6a-6p)", 3)
+        self.lbl_hum_prom  = create_stat_card(resumen_frame, "HUM. PROMEDIO", 2)
+        self.lbl_luz_prom  = create_stat_card(resumen_frame, "LUZ PROM (6a-6p)", 3)
         
-        # 2. Tabla de Datos Moderna (Data Grid)
-        table_frame = ctk.CTkFrame(self.tab_historico, corner_radius=10, fg_color="#2b2b2b")
-        table_frame.grid(row=1, column=0, padx=20, pady=10, sticky="nsew")
-        table_frame.grid_columnconfigure(0, weight=1)
-        table_frame.grid_rowconfigure(0, weight=1)
+        # 2. Tabla con scroll vertical Y horizontal
+        table_outer = ctk.CTkFrame(self.tab_historico, corner_radius=10, fg_color="#2b2b2b")
+        table_outer.grid(row=1, column=0, padx=20, pady=10, sticky="nsew")
+        table_outer.grid_columnconfigure(0, weight=1)
+        table_outer.grid_rowconfigure(0, weight=1)
         
         style = ttk.Style()
         style.theme_use("default")
-        
-        # Eliminamos bordes 3D antiguos (relief flat), texto claro
         style.configure("Custom.Treeview",
-                        background="#2b2b2b",
-                        foreground="white",
-                        rowheight=35,
-                        fieldbackground="#2b2b2b",
-                        borderwidth=0,
-                        relief="flat",
-                        font=("Roboto", 11))
+                        background="#2b2b2b", foreground="white",
+                        rowheight=35, fieldbackground="#2b2b2b",
+                        borderwidth=0, relief="flat", font=("Roboto", 11))
         style.map("Custom.Treeview", background=[("selected", "#3498db")])
         style.configure("Custom.Treeview.Heading",
-                        background="#1e2430",
-                        foreground="white",
-                        font=("Roboto", 12, "bold"),
-                        relief="flat",
-                        borderwidth=0)
+                        background="#1e2430", foreground="white",
+                        font=("Roboto", 12, "bold"), relief="flat", borderwidth=0)
         style.map("Custom.Treeview.Heading", background=[("active", "#2c3e50")])
         
-        columns = ("Fecha_Hora", "Temp(°C)", "Hum(%)", "Luminosidad(Lx)", "Ventilador", "Bomba_Riego", "Iluminacion_LED(%)")
-        self.tree = ttk.Treeview(table_frame, columns=columns, show="headings", style="Custom.Treeview")
+        # ── Columnas actualizadas ─────────────────────────────────────────────
+        columns = (
+            "N°", "Fecha_Hora", "Temp(°C)", "Hum(%)", "Luminosidad(Lx)",
+            "Ventilador", "Aspersores", "Iluminacion_LED(%)",
+            "Calefaccion(%)", "Pant. Termica"
+        )
+        self.tree = ttk.Treeview(
+            table_outer, columns=columns, show="headings", style="Custom.Treeview"
+        )
         
-        scrollbar = ttk.Scrollbar(table_frame, orient="vertical", command=self.tree.yview)
-        self.tree.configure(yscrollcommand=scrollbar.set)
+        # Scrollbar vertical
+        v_scroll = ttk.Scrollbar(table_outer, orient="vertical",   command=self.tree.yview)
+        # Scrollbar horizontal
+        h_scroll = ttk.Scrollbar(table_outer, orient="horizontal", command=self.tree.xview)
+        self.tree.configure(yscrollcommand=v_scroll.set, xscrollcommand=h_scroll.set)
         
-        self.tree.grid(row=0, column=0, sticky="nsew", padx=(15, 0), pady=15)
-        scrollbar.grid(row=0, column=1, sticky="ns", padx=(0, 15), pady=15)
+        self.tree.grid(row=0, column=0, sticky="nsew", padx=(15, 0), pady=(15, 0))
+        v_scroll.grid(row=0, column=1, sticky="ns",  padx=(0, 15), pady=(15, 0))
+        h_scroll.grid(row=1, column=0, sticky="ew",  padx=(15, 0), pady=(0, 10))
         
         ancho_columnas = {
-            "Fecha_Hora": 160,
-            "Temp(°C)": 80,
-            "Hum(%)": 80,
-            "Luminosidad(Lx)": 110,
-            "Ventilador": 80,
-            "Bomba_Riego": 100,
-            "Iluminacion_LED(%)": 120
+            "N°":                   40,
+            "Fecha_Hora":          160,
+            "Temp(°C)":             80,
+            "Hum(%))":              80,
+            "Luminosidad(Lx)":     110,
+            "Ventilador":           85,
+            "Aspersores":           90,
+            "Iluminacion_LED(%)":  120,
+            "Calefaccion(%)": 110,
+            "Pant. Termica":       110,
         }
-        
+        nombres_visibles = {
+            "N°":                  "#",
+            "Fecha_Hora":          "Fecha / Hora",
+            "Temp(°C)":            "Temp (°C)",
+            "Hum(%))":             "Hum (%)",
+            "Luminosidad(Lx)":     "Luz (Lx)",
+            "Ventilador":          "Ventilador",
+            "Aspersores":          "Aspersores",
+            "Iluminacion_LED(%)": "Ilum. LED (%)",
+            "Calefaccion(%)": "Calef. (%)",
+            "Pant. Termica":       "Pant. Térmica",
+        }
         for col in columns:
-            self.tree.heading(col, text=col.replace("_", " "))
-            self.tree.column(col, anchor="center", width=ancho_columnas[col], minwidth=ancho_columnas[col])
+            ancho = ancho_columnas.get(col, 100)
+            self.tree.heading(col, text=nombres_visibles.get(col, col))
+            self.tree.column(col, anchor="center", width=ancho, minwidth=ancho)
             
-        # Efecto Cebra: Una fila gris muy oscura y la siguiente un poco más clara
         self.tree.tag_configure('evenrow', background="#2b2b2b")
-        self.tree.tag_configure('oddrow', background="#3b3b3b")
+        self.tree.tag_configure('oddrow',  background="#3b3b3b")
         
-        # 4. Controles Inferiores y Paginación
+        # 3. Controles Inferiores y Paginación
         self.pagina_actual = 1
         self.total_paginas = 1
         
         controles_frame = ctk.CTkFrame(self.tab_historico, fg_color="transparent")
         controles_frame.grid(row=2, column=0, padx=20, pady=(10, 20), sticky="ew")
-        controles_frame.grid_columnconfigure((0, 1, 2, 3, 4, 5, 6), weight=1)
         
         btn_container = ctk.CTkFrame(controles_frame, fg_color="transparent")
         btn_container.pack(anchor="center")
         
-        self.btn_anterior = ctk.CTkButton(btn_container, text="◀ Anterior", width=100, font=("Roboto", 14, "bold"),
-                                          command=self.pagina_anterior)
+        self.btn_anterior = ctk.CTkButton(
+            btn_container, text="◀ Anterior", width=100, font=("Roboto", 14, "bold"),
+            command=self.pagina_anterior
+        )
         self.btn_anterior.pack(side="left", padx=5)
         
-        self.lbl_paginacion = ctk.CTkLabel(btn_container, text="Página 1 de 1", font=("Roboto", 14, "bold"))
+        self.lbl_paginacion = ctk.CTkLabel(
+            btn_container, text="Página 1 de 1", font=("Roboto", 14, "bold")
+        )
         self.lbl_paginacion.pack(side="left", padx=10)
         
-        self.btn_siguiente = ctk.CTkButton(btn_container, text="Siguiente ▶", width=100, font=("Roboto", 14, "bold"),
-                                           command=self.pagina_siguiente)
+        self.btn_siguiente = ctk.CTkButton(
+            btn_container, text="Siguiente ▶", width=100, font=("Roboto", 14, "bold"),
+            command=self.pagina_siguiente
+        )
         self.btn_siguiente.pack(side="left", padx=5)
         
-        self.entry_pagina = ctk.CTkEntry(btn_container, width=50, justify="center")
-        self.entry_pagina.pack(side="left", padx=(15, 5))
+        # Separador visual
+        ctk.CTkLabel(btn_container, text="│", font=("Roboto", 18), text_color="#555").pack(side="left", padx=8)
         
-        btn_ir = ctk.CTkButton(btn_container, text="Ir", width=40, font=("Roboto", 14, "bold"), fg_color="#8e44ad", hover_color="#9b59b6",
-                               command=self.ir_a_pagina)
-        btn_ir.pack(side="left", padx=5)
+        self.entry_pagina = ctk.CTkEntry(btn_container, width=50, justify="center", placeholder_text="Pág")
+        self.entry_pagina.pack(side="left", padx=(0, 5))
         
-        btn_refresh = ctk.CTkButton(btn_container, text="🔄 Refrescar", font=("Roboto", 14, "bold"), 
-                                    fg_color="#3498db", hover_color="#2980b9",
-                                    command=self.ir_a_ultima_pagina)
-        btn_refresh.pack(side="left", padx=5)
+        ctk.CTkButton(
+            btn_container, text="Ir", width=40, font=("Roboto", 14, "bold"),
+            fg_color="#8e44ad", hover_color="#9b59b6",
+            command=self.ir_a_pagina
+        ).pack(side="left", padx=5)
+        
 
+
+
+        ctk.CTkButton(
+            btn_container, text="🗑️ Limpiar Datos", font=("Roboto", 14, "bold"),
+            fg_color="#c0392b", hover_color="#e74c3c",
+            command=self.limpiar_datos_historial
+        ).pack(side="left", padx=5)
         
-        self.cargar_datos_historial(self.pagina_actual)
+        self.refrescar_datos_historial()
+        self._auto_refrescar_historial()  # Iniciar loop de auto-refresco
 
     def pagina_anterior(self):
         if self.pagina_actual > 1:
@@ -1141,14 +1173,125 @@ class VentanaInvernadero:
         except ValueError:
             messagebox.showerror("Error", "Ingrese un número de página válido.")
             
-    def ir_a_ultima_pagina(self):
-        # Refresca los datos totales y salta a la última página automáticamente
-        _, total_pag, _ = self.ctrl.obtener_historial_paginado(1, limite=50)
-        self.cargar_datos_historial(total_pag)
+
+    def _calcular_promedios_globales(self):
+        # Lee TODO el historial y calcula el promedio
+        historial_completo = self.ctrl.persistencia.consultar_historial()
+        total_reg = len(historial_completo)
+        
+        if total_reg == 0:
+            self.lbl_temp_prom.configure(text="-- °C", text_color="white")
+            self.lbl_hum_prom.configure(text="-- %", text_color="white")
+            self.lbl_luz_prom.configure(text="-- Lx", text_color="white")
+            self.lbl_total_reg.configure(text="0", text_color="white")
+            return
+
+        total_temp = 0.0
+        total_hum = 0.0
+        total_luz = 0.0
+        count_luz = 0
+
+        for row in historial_completo:
+            try:
+                t   = float(row.get("Temperatura_C") or 0)
+                h   = float(row.get("Humedad_Pct") or 0)
+                luz = float(row.get("Luminosidad_Lux") or 0)
+                
+                total_temp += t
+                total_hum  += h
+                
+                # Extraer hora de strings tipo "Día Virtual 1 - 14:30:00" o "2026-05-19 14:30:00"
+                fecha = row.get("Fecha_Hora", "")
+                try:
+                    if "Día Virtual" in fecha:
+                        # Formato nuevo: "Día Virtual X - HH:MM:SS"
+                        time_part = fecha.split("-")[-1].strip()
+                        dt_hour = int(time_part.split(":")[0])
+                    else:
+                        # Formato viejo
+                        dt = datetime.datetime.strptime(fecha, "%Y-%m-%d %H:%M:%S")
+                        dt_hour = dt.hour
+                        
+                    if 6 <= dt_hour < 18:
+                        total_luz += luz
+                        count_luz += 1
+                except Exception:
+                    pass
+            except Exception:
+                continue
+
+        prom_t = total_temp / total_reg
+        prom_h = total_hum / total_reg
+        self.lbl_temp_prom.configure(text=f"{prom_t:.1f} °C", text_color="#3498db" if prom_t < 15 else "#2ecc71" if prom_t < 29 else "#e74c3c")
+        self.lbl_hum_prom.configure(text=f"{prom_h:.1f} %", text_color="#f1c40f" if prom_h < 40 else "#3498db" if prom_h <= 80 else "#e74c3c")
+        
+        if count_luz > 0:
+            prom_luz = total_luz / count_luz
+            self.lbl_luz_prom.configure(text=f"{prom_luz:.0f} Lx", text_color="#95a5a6" if prom_luz < 2000 else "#f1c40f" if prom_luz <= 8500 else "#e74c3c")
+        else:
+            self.lbl_luz_prom.configure(text="-- Lx", text_color="white")
+            
+        self.lbl_total_reg.configure(text=str(total_reg), text_color="white")
+
+    def refrescar_datos_historial(self):
+        """Actualiza promedios globales y recarga la página 1."""
+        self._calcular_promedios_globales()
+        self.cargar_datos_historial(1)
+
+    def _auto_refrescar_historial(self):
+        """Refresca silenciosamente el historial en la página actual cada 5 segundos."""
+        self._calcular_promedios_globales()
+        self.cargar_datos_historial(self.pagina_actual)
+        self.root.after(5000, self._auto_refrescar_historial)
+
+    def limpiar_datos_historial(self):
+        """Borra todos los registros del CSV con un diálogo NO bloqueante."""
+        dialogo = ctk.CTkToplevel(self.root)
+        dialogo.title("Confirmar")
+        dialogo.geometry("380x160")
+        dialogo.attributes("-topmost", True)
+        dialogo.resizable(False, False)
+        dialogo.grab_set()  # Modal sin bloquear el hilo del reloj
+
+        ctk.CTkLabel(
+            dialogo,
+            text="¿Borrar TODOS los datos del historial?",
+            font=("Roboto", 15, "bold")
+        ).pack(pady=(22, 4))
+        ctk.CTkLabel(
+            dialogo,
+            text="Esta acción no se puede deshacer.",
+            font=("Roboto", 12),
+            text_color="#e74c3c"
+        ).pack(pady=(0, 16))
+
+        btn_frame = ctk.CTkFrame(dialogo, fg_color="transparent")
+        btn_frame.pack()
+
+        def confirmar():
+            dialogo.destroy()
+            import csv
+            with self.ctrl.persistencia.ruta.open(mode='w', newline='', encoding='utf-8') as f:
+                writer = csv.writer(f)
+                writer.writerow(["Fecha_Hora", "Temperatura_C", "Humedad_Pct", "Ventilador",
+                                  "Aspersores", "Luminosidad_Lux", "Iluminacion_LED",
+                                  "Calefaccion_Pct", "Malla_Desplegada"])
+            self.refrescar_datos_historial()
+
+        ctk.CTkButton(
+            btn_frame, text="Sí, borrar", width=120,
+            fg_color="#c0392b", hover_color="#e74c3c",
+            font=("Roboto", 13, "bold"), command=confirmar
+        ).pack(side="left", padx=10)
+        ctk.CTkButton(
+            btn_frame, text="Cancelar", width=120,
+            fg_color="#555", hover_color="#777",
+            font=("Roboto", 13, "bold"), command=dialogo.destroy
+        ).pack(side="left", padx=10)
 
     def cargar_datos_historial(self, pagina):
-        for item in self.tree.get_children():
-            self.tree.delete(item)
+        existing_items = self.tree.get_children()
+
             
         datos, total_pag, total_reg = self.ctrl.obtener_historial_paginado(pagina, limite=50)
         self.pagina_actual = pagina
@@ -1160,59 +1303,52 @@ class VentanaInvernadero:
         self.btn_anterior.configure(state="normal" if self.pagina_actual > 1 else "disabled")
         self.btn_siguiente.configure(state="normal" if self.pagina_actual < self.total_paginas else "disabled")
         
-        total_temp = 0.0
-        total_hum = 0.0
-        total_luz = 0.0
-        count_luz = 0
-        
         for i, row in enumerate(datos):
             try:
-                t = float(row.get("Temperatura_C") or 0)
-                h = float(row.get("Humedad_Pct") or 0)
+                fecha = row.get("Fecha_Hora", "--")
+                t   = float(row.get("Temperatura_C") or 0)
+                h   = float(row.get("Humedad_Pct") or 0)
                 luz = float(row.get("Luminosidad_Lux") or 0)
                 led = float(row.get("Iluminacion_LED") or 0)
                 
-                total_temp += t
-                total_hum += h
-                
-                fecha = row.get("Fecha_Hora", "--")
-                try:
-                    dt = datetime.datetime.strptime(fecha, "%Y-%m-%d %H:%M:%S")
-                    if 6 <= dt.hour < 18:
-                        total_luz += luz
-                        count_luz += 1
-                except Exception:
-                    pass
-                
-                v_val = str(row.get("Ventilador", "")).strip().lower()
-                r_val = str(row.get("Bomba_Riego", "")).strip().lower()
-                
-                v = "ON" if v_val == "true" else "OFF"
-                r = "ON" if r_val == "true" else "OFF"
+                v_val = str(row.get("Ventilador", "")).strip()
+                # Compatibilidad: columna puede llamarse Aspersores o Bomba_Riego (datos viejos)
+                r_raw = row.get("Aspersores") or row.get("Bomba_Riego", "")
+                r_val = str(r_raw).strip()
+
+                calef_raw = row.get("Calefaccion_Pct", "")
+                malla_raw = row.get("Malla_Desplegada", "")
+
+                def _to_pct(raw_str):
+                    """Convierte True/False o número a cadena de porcentaje."""
+                    s = raw_str.lower()
+                    if s == "true":  return "100%"
+                    if s == "false": return "0%"
+                    try:
+                        return f"{float(raw_str):.0f}%"
+                    except (ValueError, TypeError):
+                        return "--"
+
+                v_disp    = _to_pct(v_val)
+                r_disp    = _to_pct(r_val)
+                calef_disp = _to_pct(calef_raw) if calef_raw not in ("", None) else "--"
+                malla_disp = "🟢 Sí" if malla_raw.lower() == "true" else "🔴 No"
                 
                 tag = 'evenrow' if i % 2 == 0 else 'oddrow'
-                self.tree.insert("", "end", values=(fecha, f"{t:.1f}", f"{h:.1f}", f"{luz:.0f}", v, r, f"{led:.0f}%"), tags=(tag,))
+                values = (i + 1, fecha, f"{t:.1f}", f"{h:.1f}", f"{luz:.0f}", v_disp, r_disp, f"{led:.0f}%", calef_disp, malla_disp)
+                
+                if i < len(existing_items):
+                    self.tree.item(existing_items[i], values=values, tags=(tag,))
+                else:
+                    self.tree.insert("", "end", values=values, tags=(tag,))
             except Exception:
                 pass
                 
-        # Calcular estadísticas de la página actual
-        regs_pagina = len(datos)
-        if regs_pagina > 0:
-            prom_t = total_temp / regs_pagina
-            prom_h = total_hum / regs_pagina
-            self.lbl_temp_prom.configure(text=f"{prom_t:.1f} °C", text_color="#3498db" if prom_t < 15 else "#2ecc71" if prom_t < 29 else "#e74c3c")
-            self.lbl_hum_prom.configure(text=f"{prom_h:.1f} %", text_color="#f1c40f" if prom_h < 40 else "#3498db" if prom_h <= 80 else "#e74c3c")
-        else:
-            self.lbl_temp_prom.configure(text="-- °C", text_color="white")
-            self.lbl_hum_prom.configure(text="-- %", text_color="white")
-            
-        if count_luz > 0:
-            prom_luz = total_luz / count_luz
-            self.lbl_luz_prom.configure(text=f"{prom_luz:.0f} Lx", text_color="#95a5a6" if prom_luz < 2000 else "#f1c40f" if prom_luz <= 8500 else "#e74c3c")
-        else:
-            self.lbl_luz_prom.configure(text="-- Lx", text_color="white")
-            
-        self.lbl_total_reg.configure(text=str(total_reg), text_color="white")
+        # Eliminar cualquier fila sobrante si la nueva página tiene menos de 50 registros
+        for i in range(len(datos), len(existing_items)):
+            self.tree.delete(existing_items[i])
+                
+
 
     def animar_alerta(self):
         if not self.alerta_activa:
@@ -1232,6 +1368,14 @@ class VentanaInvernadero:
 
 
 
+    def _tick_reloj(self):
+        """Loop independiente del reloj: se actualiza exactamente cada 1 segundo."""
+        hora_actual = self.ctrl.tiempo_simulado
+        self.clock_label.configure(text=hora_actual.strftime("%I:%M:%S %p"))
+        if hasattr(self, 'lbl_dia_virtual'):
+            self.lbl_dia_virtual.configure(text=f"Día Virtual: {self.ctrl.dia_virtual}")
+        self.root.after(1000, self._tick_reloj)
+
     def actualizar(self):
         """Ciclo principal de UI: Obtiene datos del controlador y actualiza GUI/Gráfica."""
         resultado = self.ctrl.procesar()
@@ -1250,15 +1394,22 @@ class VentanaInvernadero:
             self.clima_actual = "Frío"
             
         ahora_real = datetime.datetime.now()
-        hacer_refresco_pesado = (ahora_real - self.ultimo_refresco_pesado).total_seconds() >= 1.0 or self.ctrl.multiplicador_tiempo == 1.0
+        hacer_refresco_pesado = (ahora_real - self.ultimo_refresco_pesado).total_seconds() >= 5.0
         
         if hacer_refresco_pesado:
             self.ultimo_refresco_pesado = ahora_real
-            self.ctrl.registrar_lectura(t, h, v, r, luz, intensidad_luz)
+            self.ctrl.registrar_lectura(
+                self.ctrl.dia_virtual,
+                hora_actual,          # fecha/hora SIMULADA
+                t, h,
+                esfuerzo_v,           # % ventilador
+                esfuerzo_r,           # % aspersores
+                luz, intensidad_luz,
+                calef_pct=calef_pot,
+                malla=self.ctrl.malla_desplegada
+            )
         
-        self.clock_label.configure(text=hora_actual.strftime("%I:%M:%S %p"))
-        if hasattr(self, 'lbl_dia_virtual'):
-            self.lbl_dia_virtual.configure(text=f"Día Virtual: {self.ctrl.dia_virtual}")
+        # Nota: el reloj se actualiza en _tick_reloj() cada 1 segundo, no aquí
         self.pronostico_label.configure(text=pronostico)
         self.lbl_ext_temp.configure(text=f"🌡️ Ext: {t_ext:.1f} °C | 💧 Hum: {h_ext:.1f} %")
         
@@ -1513,13 +1664,15 @@ class VentanaInvernadero:
             self.alerta_activa = False
             self.target_rgb = [46, 204, 113] # #2ecc71 (Verde sano)
             
-        delay = 7000
+        delay = 1000
         self.root.after(delay, self.actualizar)
 
     def cerrar_programa(self):
         try:
+            import matplotlib.pyplot as plt
+            plt.close('all')
             self.root.quit()
             self.root.destroy()
-        except:
+        except Exception:
             pass
-        os._exit(0)
+        sys.exit(0)

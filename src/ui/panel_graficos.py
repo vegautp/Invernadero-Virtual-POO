@@ -23,6 +23,18 @@ COLORS = {
     'hum_ext': '#1abc9c',
 }
 
+COLORBLIND_COLORS = {
+    'temp':    '#D55E00',
+    'hum':     '#56B4E9',
+    'luz':     '#F0E442',
+    'vent':    '#0072B2',
+    'riego':   '#CC79A7',
+    'ilum':    '#E69F00',
+    'calef':   '#009E73',
+    'temp_ext':'#D55E00',
+    'hum_ext': '#56B4E9',
+}
+
 
 def _estilizar_ax(ax, title: str, ylabel: str, es_ultimo: bool = False, xlabel: str = "") -> None:
     """Aplica el tema oscuro a un eje matplotlib."""
@@ -62,6 +74,8 @@ class PanelMonitoreoGrafico:
     def __init__(self, master: ctk.CTkFrame, obtener_datos_cb: Callable[[], Tuple]):
         self.master = master
         self.obtener_datos_cb = obtener_datos_cb
+
+        self.colorblind_mode = False
 
         # ── Buffers de datos (60 × 7 s = 7 min de historial) ───────────────
         self.INTERVALO_S = 7  # segundos por ciclo
@@ -104,22 +118,54 @@ class PanelMonitoreoGrafico:
         self.combo.set(self.SECCIONES[0])
         self.combo.pack(side="left")
 
+        self.switch_daltonismo = ctk.CTkSwitch(
+            header,
+            text="Modo Daltonismo",
+            font=("Roboto", 12),
+            command=self._toggle_daltonismo,
+            onvalue=True,
+            offvalue=False
+        )
+        self.switch_daltonismo.pack(side="right", padx=(20, 0))
+
         # ── Tres frames scrollables (uno por sección) ─────────────────────────
         opts = dict(fg_color="transparent", corner_radius=10)
         self.frame_interior  = ctk.CTkScrollableFrame(master, **opts)
         self.frame_exterior  = ctk.CTkScrollableFrame(master, **opts)
         self.frame_actuadores = ctk.CTkScrollableFrame(master, **opts)
 
-        # ── Figuras matplotlib ────────────────────────────────────────────────
+        # ── Figuras matplotlib (Inicialización diferida) ──────────────────────
+        self._graficas_listas = False
+        
+        # Mostrar mensaje de carga temporalmente (opcional pero ayuda a la UX)
+        self.lbl_cargando = ctk.CTkLabel(master, text="Cargando motor gráfico, por favor espere...", font=("Roboto", 14))
+        self.lbl_cargando.pack(expand=True)
+        
+        # Diferir la construcción para que la ventana principal cargue al instante
+        self.master.after(50, self._inicializar_graficas_diferidas)
+
+    def _inicializar_graficas_diferidas(self):
+        self.lbl_cargando.pack_forget()
+        
         self._construir_grafica_interior()
         self._construir_grafica_exterior()
         self._construir_grafica_actuadores()
 
         # Mostrar la primera sección por defecto
         self._mostrar_frame(self.frame_interior)
+        self._graficas_listas = True
 
         # Arrancar ciclo: primer dato inmediato, luego cada 7 s
-        self.master.after(0, self.actualizar_graficas)
+        self.actualizar_graficas()
+
+    def _toggle_daltonismo(self):
+        self.colorblind_mode = self.switch_daltonismo.get()
+        self._dibujar_graficas_interior()
+        self._dibujar_graficas_exterior()
+        self._dibujar_graficas_actuadores()
+
+    def _get_color(self, key):
+        return COLORBLIND_COLORS[key] if self.colorblind_mode else COLORS[key]
 
     # ── Construcción de figuras ───────────────────────────────────────────────
 
@@ -205,81 +251,101 @@ class PanelMonitoreoGrafico:
                 self.temp_ext_data.append(float(temp_ext))
                 self.hum_ext_data.append(float(hum_ext))
 
-                td = list(self.time_data)
-
-                # ── Gráfica Interior ──────────────────────────────────────────
-                self.ax_temp.clear()
-                self.ax_hum.clear()
-                self.ax_luz.clear()
-
-                self.ax_temp.plot(td, list(self.temp_data), color=COLORS['temp'], label='Temperatura', linewidth=1.8)
-                self.ax_hum.plot(td, list(self.hum_data),  color=COLORS['hum'],  label='Humedad',      linewidth=1.8)
-                self.ax_luz.plot(td, list(self.luz_data),  color=COLORS['luz'],  label='Luminosidad',  linewidth=1.8)
-
-                self.ax_temp.fill_between(td, list(self.temp_data), alpha=0.12, color=COLORS['temp'])
-                self.ax_hum.fill_between(td, list(self.hum_data), alpha=0.12, color=COLORS['hum'])
-                self.ax_luz.fill_between(td, list(self.luz_data), alpha=0.12, color=COLORS['luz'])
-
-                _estilizar_ax(self.ax_temp, "Temperatura Interior (°C)", "°C")
-                _estilizar_ax(self.ax_hum,  "Humedad Relativa Interior (%)", "%")
-                _estilizar_ax(self.ax_luz,  "Luminosidad (Lux)", "Lux", es_ultimo=True)
-                for ax in (self.ax_temp, self.ax_hum, self.ax_luz):
-                    _leyenda(ax)
-
-                self.fig_int.subplots_adjust(hspace=0.55)
-                self.canvas_int.draw()
-
-                # ── Gráfica Exterior ──────────────────────────────────────────
-                self.ax_temp_ext.clear()
-                self.ax_hum_ext.clear()
-
-                self.ax_temp_ext.plot(td, list(self.temp_ext_data), color=COLORS['temp_ext'], label='Temp. Exterior', linewidth=1.8)
-                self.ax_hum_ext.plot(td, list(self.hum_ext_data),  color=COLORS['hum_ext'],  label='Hum. Exterior',  linewidth=1.8)
-
-                self.ax_temp_ext.fill_between(td, list(self.temp_ext_data), alpha=0.12, color=COLORS['temp_ext'])
-                self.ax_hum_ext.fill_between(td, list(self.hum_ext_data), alpha=0.12, color=COLORS['hum_ext'])
-
-                _estilizar_ax(self.ax_temp_ext, "Temperatura Exterior (°C)", "°C")
-                _estilizar_ax(self.ax_hum_ext,  "Humedad Exterior (%)", "%", es_ultimo=True)
-                for ax in (self.ax_temp_ext, self.ax_hum_ext):
-                    _leyenda(ax)
-
-                self.fig_ext.subplots_adjust(hspace=0.55)
-                self.canvas_ext.draw()
-
-                # ── Gráfica Actuadores ────────────────────────────────────────
-                self.ax_vent.clear()
-                self.ax_riego.clear()
-                self.ax_ilum.clear()
-                self.ax_calef.clear()
-
-                self.ax_vent.step(td,  list(self.vent_data),  color=COLORS['vent'],  label='Ventilador',  linewidth=1.8, where='post')
-                self.ax_riego.step(td, list(self.riego_data), color=COLORS['riego'], label='Aspersores',  linewidth=1.8, where='post')
-                self.ax_ilum.plot(td,  list(self.ilum_data),  color=COLORS['ilum'],  label='Iluminación LED', linewidth=1.8)
-                self.ax_calef.plot(td, list(self.calef_data), color=COLORS['calef'], label='Calefacción',  linewidth=1.8)
-
-                self.ax_ilum.fill_between(td, list(self.ilum_data), alpha=0.12, color=COLORS['ilum'])
-                self.ax_calef.fill_between(td, list(self.calef_data), alpha=0.12, color=COLORS['calef'])
-
-                # Todos los actuadores en eje Y con escala 0-100%
-                for ax in (self.ax_vent, self.ax_riego, self.ax_ilum, self.ax_calef):
-                    ax.set_ylim(-5, 105)
-                    ax.yaxis.set_major_formatter(
-                        plt.FuncFormatter(lambda v, _: f"{int(v)}%")
-                    )
-
-                _estilizar_ax(self.ax_vent,  "Ventilador", "%")
-                _estilizar_ax(self.ax_riego, "Aspersores de Riego", "%")
-                _estilizar_ax(self.ax_ilum,  "Iluminación LED", "%")
-                _estilizar_ax(self.ax_calef, "Calefacción", "%", es_ultimo=True)
-                for ax in (self.ax_vent, self.ax_riego, self.ax_ilum, self.ax_calef):
-                    _leyenda(ax)
-
-                self.fig_act.subplots_adjust(hspace=0.6)
-                self.canvas_act.draw()
+                self._dibujar_graficas_interior()
+                self._dibujar_graficas_exterior()
+                self._dibujar_graficas_actuadores()
 
         except Exception as e:
             print(f"[PanelGrafico] Error en actualización: {e}")
 
         # Próximo ciclo en 7 s
         self.master.after(7000, self.actualizar_graficas)
+
+    def _dibujar_graficas_interior(self):
+        td = list(self.time_data)
+        if not td: return
+        self.ax_temp.clear()
+        self.ax_hum.clear()
+        self.ax_luz.clear()
+
+        c_temp = self._get_color('temp')
+        c_hum = self._get_color('hum')
+        c_luz = self._get_color('luz')
+
+        self.ax_temp.plot(td, list(self.temp_data), color=c_temp, label='Temperatura', linewidth=1.8)
+        self.ax_hum.plot(td, list(self.hum_data),  color=c_hum,  label='Humedad',      linewidth=1.8)
+        self.ax_luz.plot(td, list(self.luz_data),  color=c_luz,  label='Luminosidad',  linewidth=1.8)
+
+        self.ax_temp.fill_between(td, list(self.temp_data), alpha=0.12, color=c_temp)
+        self.ax_hum.fill_between(td, list(self.hum_data), alpha=0.12, color=c_hum)
+        self.ax_luz.fill_between(td, list(self.luz_data), alpha=0.12, color=c_luz)
+
+        _estilizar_ax(self.ax_temp, "Temperatura Interior (°C)", "°C")
+        _estilizar_ax(self.ax_hum,  "Humedad Relativa Interior (%)", "%")
+        _estilizar_ax(self.ax_luz,  "Luminosidad (Lux)", "Lux", es_ultimo=True)
+        for ax in (self.ax_temp, self.ax_hum, self.ax_luz):
+            _leyenda(ax)
+
+        self.fig_int.subplots_adjust(hspace=0.55)
+        self.canvas_int.draw()
+
+    def _dibujar_graficas_exterior(self):
+        td = list(self.time_data)
+        if not td: return
+        self.ax_temp_ext.clear()
+        self.ax_hum_ext.clear()
+
+        c_t_ext = self._get_color('temp_ext')
+        c_h_ext = self._get_color('hum_ext')
+
+        self.ax_temp_ext.plot(td, list(self.temp_ext_data), color=c_t_ext, label='Temp. Exterior', linewidth=1.8)
+        self.ax_hum_ext.plot(td, list(self.hum_ext_data),  color=c_h_ext,  label='Hum. Exterior',  linewidth=1.8)
+
+        self.ax_temp_ext.fill_between(td, list(self.temp_ext_data), alpha=0.12, color=c_t_ext)
+        self.ax_hum_ext.fill_between(td, list(self.hum_ext_data), alpha=0.12, color=c_h_ext)
+
+        _estilizar_ax(self.ax_temp_ext, "Temperatura Exterior (°C)", "°C")
+        _estilizar_ax(self.ax_hum_ext,  "Humedad Exterior (%)", "%", es_ultimo=True)
+        for ax in (self.ax_temp_ext, self.ax_hum_ext):
+            _leyenda(ax)
+
+        self.fig_ext.subplots_adjust(hspace=0.55)
+        self.canvas_ext.draw()
+
+    def _dibujar_graficas_actuadores(self):
+        td = list(self.time_data)
+        if not td: return
+        self.ax_vent.clear()
+        self.ax_riego.clear()
+        self.ax_ilum.clear()
+        self.ax_calef.clear()
+
+        c_v = self._get_color('vent')
+        c_r = self._get_color('riego')
+        c_i = self._get_color('ilum')
+        c_c = self._get_color('calef')
+
+        self.ax_vent.step(td,  list(self.vent_data),  color=c_v,  label='Ventilador',  linewidth=1.8, where='post')
+        self.ax_riego.step(td, list(self.riego_data), color=c_r, label='Aspersores',  linewidth=1.8, where='post')
+        self.ax_ilum.plot(td,  list(self.ilum_data),  color=c_i,  label='Iluminación LED', linewidth=1.8)
+        self.ax_calef.plot(td, list(self.calef_data), color=c_c, label='Calefacción',  linewidth=1.8)
+
+        self.ax_ilum.fill_between(td, list(self.ilum_data), alpha=0.12, color=c_i)
+        self.ax_calef.fill_between(td, list(self.calef_data), alpha=0.12, color=c_c)
+
+        # Todos los actuadores en eje Y con escala 0-100%
+        for ax in (self.ax_vent, self.ax_riego, self.ax_ilum, self.ax_calef):
+            ax.set_ylim(-5, 105)
+            ax.yaxis.set_major_formatter(
+                plt.FuncFormatter(lambda v, _: f"{int(v)}%")
+            )
+
+        _estilizar_ax(self.ax_vent,  "Ventilador", "%")
+        _estilizar_ax(self.ax_riego, "Aspersores de Riego", "%")
+        _estilizar_ax(self.ax_ilum,  "Iluminación LED", "%")
+        _estilizar_ax(self.ax_calef, "Calefacción", "%", es_ultimo=True)
+        for ax in (self.ax_vent, self.ax_riego, self.ax_ilum, self.ax_calef):
+            _leyenda(ax)
+
+        self.fig_act.subplots_adjust(hspace=0.6)
+        self.canvas_act.draw()

@@ -35,8 +35,8 @@ class Controlador:
         self.salto_temporal = False
         self.dia_virtual = 1
         
-    def registrar_lectura(self, t, h, v, r, luz, intensidad_luz):
-        self.persistencia.registrar_lectura(t, h, v, r, luz, intensidad_luz)
+    def registrar_lectura(self, dia_virtual, fecha_sim, t, h, v_pct, r_pct, luz, intensidad_luz, calef_pct=0, malla=False):
+        self.persistencia.registrar_lectura(dia_virtual, fecha_sim, t, h, v_pct, r_pct, luz, intensidad_luz, calef_pct, malla)
         
     def obtener_historial_paginado(self, pagina, limite=50):
         return self.persistencia.obtener_historial_paginado(pagina, limite)
