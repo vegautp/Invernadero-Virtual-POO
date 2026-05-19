@@ -39,3 +39,27 @@ class GestorPersistencia:
             print(f"Error al leer el historial: {e}")
             
         return historial
+
+    def obtener_historial_paginado(self, pagina, limite=50):
+        """
+        Devuelve un fragmento del historial para la paginación.
+        Retorna (fragmento_datos, total_paginas, total_registros).
+        """
+        historial_completo = self.consultar_historial()
+        total_registros = len(historial_completo)
+        
+        if total_registros == 0:
+            return [], 1, 0
+            
+        import math
+        total_paginas = math.ceil(total_registros / limite)
+        
+        # Validar la página actual
+        pagina = max(1, min(pagina, total_paginas))
+        
+        inicio = (pagina - 1) * limite
+        fin = inicio + limite
+        
+        fragmento = historial_completo[inicio:fin]
+        
+        return fragmento, total_paginas, total_registros

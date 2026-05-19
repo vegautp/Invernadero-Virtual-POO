@@ -2,6 +2,7 @@ import datetime
 import random
 import math
 from entidades import SensorTemperatura, SensorHumedad, SensorLuminosidad, Ventilador, BombaRiego, SistemaIluminacion, Planta, MotorClimatico, Calefaccion
+from persistencia import GestorPersistencia
 
 class Controlador:
     def __init__(self, sp_temp=25.0, kp_temp=10.0, sp_hum=60.0, kp_hum=5.0):
@@ -18,6 +19,7 @@ class Controlador:
         self.deshumidificando = False  # Bandera de estado para histéresis de humedad (tiempo muerto)
         self.enfriando = False         # Bandera de estado para histéresis térmica (tiempo muerto)
         self.iluminando = False        # Bandera de estado para histéresis lumínica
+        self.persistencia = GestorPersistencia()
         
         # Parámetros de control proporcional
         self.sp_temp = sp_temp
@@ -32,6 +34,12 @@ class Controlador:
         self.tiempo_manual = False
         self.salto_temporal = False
         self.dia_virtual = 1
+        
+    def registrar_lectura(self, t, h, v, r, luz, intensidad_luz):
+        self.persistencia.registrar_lectura(t, h, v, r, luz, intensidad_luz)
+        
+    def obtener_historial_paginado(self, pagina, limite=50):
+        return self.persistencia.obtener_historial_paginado(pagina, limite)
         
     def fijar_hora_manual(self, hora, minuto=0):
         # Si saltamos a una hora "anterior" a la actual, asumimos que avanzamos al día siguiente

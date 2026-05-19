@@ -13,7 +13,6 @@ import collections
 import datetime
 
 from controlador import Controlador
-from persistencia import GestorPersistencia
 from ui.panel_graficos import PanelMonitoreoGrafico
 
 class ToolTip:
@@ -49,7 +48,7 @@ class VentanaInvernadero:
         self.root.protocol("WM_DELETE_WINDOW", self.cerrar_programa)
         
         self.ctrl = Controlador()
-        self.persistencia = GestorPersistencia()
+
         
         self.current_data = (0.0, 0.0, 0.0, False, False, 0.0, 0.0)
         self.ultimo_refresco_pesado = datetime.datetime.now()
@@ -1087,31 +1086,79 @@ class VentanaInvernadero:
         self.tree.tag_configure('evenrow', background="#2b2b2b")
         self.tree.tag_configure('oddrow', background="#3b3b3b")
         
-        # 4. Controles Inferiores
+        # 4. Controles Inferiores y Paginación
+        self.pagina_actual = 1
+        self.total_paginas = 1
+        
         controles_frame = ctk.CTkFrame(self.tab_historico, fg_color="transparent")
         controles_frame.grid(row=2, column=0, padx=20, pady=(10, 20), sticky="ew")
-        controles_frame.grid_columnconfigure(0, weight=1)
+        controles_frame.grid_columnconfigure((0, 1, 2, 3, 4, 5, 6), weight=1)
         
         btn_container = ctk.CTkFrame(controles_frame, fg_color="transparent")
         btn_container.pack(anchor="center")
         
-        btn_refresh = ctk.CTkButton(btn_container, text="🔄 Refrescar Datos", font=("Roboto", 14, "bold"), 
+        self.btn_anterior = ctk.CTkButton(btn_container, text="◀ Anterior", width=100, font=("Roboto", 14, "bold"),
+                                          command=self.pagina_anterior)
+        self.btn_anterior.pack(side="left", padx=5)
+        
+        self.lbl_paginacion = ctk.CTkLabel(btn_container, text="Página 1 de 1", font=("Roboto", 14, "bold"))
+        self.lbl_paginacion.pack(side="left", padx=10)
+        
+        self.btn_siguiente = ctk.CTkButton(btn_container, text="Siguiente ▶", width=100, font=("Roboto", 14, "bold"),
+                                           command=self.pagina_siguiente)
+        self.btn_siguiente.pack(side="left", padx=5)
+        
+        self.entry_pagina = ctk.CTkEntry(btn_container, width=50, justify="center")
+        self.entry_pagina.pack(side="left", padx=(15, 5))
+        
+        btn_ir = ctk.CTkButton(btn_container, text="Ir", width=40, font=("Roboto", 14, "bold"), fg_color="#8e44ad", hover_color="#9b59b6",
+                               command=self.ir_a_pagina)
+        btn_ir.pack(side="left", padx=5)
+        
+        btn_refresh = ctk.CTkButton(btn_container, text="🔄 Refrescar", font=("Roboto", 14, "bold"), 
                                     fg_color="#3498db", hover_color="#2980b9",
-                                    command=self.cargar_datos_historial)
-        btn_refresh.pack(side="left", padx=10)
-        
-        btn_export = ctk.CTkButton(btn_container, text="📄 Exportar Resumen", font=("Roboto", 14, "bold"), 
-                                   fg_color="#2ecc71", hover_color="#27ae60",
-                                   command=self.exportar_resumen)
-        btn_export.pack(side="left", padx=10)
-        
-        self.cargar_datos_historial()
+                                    command=self.ir_a_ultima_pagina)
+        btn_refresh.pack(side="left", padx=5)
 
-    def cargar_datos_historial(self):
+        
+        self.cargar_datos_historial(self.pagina_actual)
+
+    def pagina_anterior(self):
+        if self.pagina_actual > 1:
+            self.cargar_datos_historial(self.pagina_actual - 1)
+            
+    def pagina_siguiente(self):
+        if self.pagina_actual < self.total_paginas:
+            self.cargar_datos_historial(self.pagina_actual + 1)
+            
+    def ir_a_pagina(self):
+        try:
+            pag = int(self.entry_pagina.get())
+            if 1 <= pag <= self.total_paginas:
+                self.cargar_datos_historial(pag)
+            else:
+                messagebox.showerror("Error", f"La página debe estar entre 1 y {self.total_paginas}.")
+        except ValueError:
+            messagebox.showerror("Error", "Ingrese un número de página válido.")
+            
+    def ir_a_ultima_pagina(self):
+        # Refresca los datos totales y salta a la última página automáticamente
+        _, total_pag, _ = self.ctrl.obtener_historial_paginado(1, limite=50)
+        self.cargar_datos_historial(total_pag)
+
+    def cargar_datos_historial(self, pagina):
         for item in self.tree.get_children():
             self.tree.delete(item)
             
-        datos = self.persistencia.consultar_historial()
+        datos, total_pag, total_reg = self.ctrl.obtener_historial_paginado(pagina, limite=50)
+        self.pagina_actual = pagina
+        self.total_paginas = max(1, total_pag)
+        
+        self.lbl_paginacion.configure(text=f"Página {self.pagina_actual} de {self.total_paginas}")
+        self.entry_pagina.delete(0, 'end')
+        
+        self.btn_anterior.configure(state="normal" if self.pagina_actual > 1 else "disabled")
+        self.btn_siguiente.configure(state="normal" if self.pagina_actual < self.total_paginas else "disabled")
         
         total_temp = 0.0
         total_hum = 0.0
@@ -1148,10 +1195,11 @@ class VentanaInvernadero:
             except Exception:
                 pass
                 
-        total_reg = len(datos)
-        if total_reg > 0:
-            prom_t = total_temp / total_reg
-            prom_h = total_hum / total_reg
+        # Calcular estadísticas de la página actual
+        regs_pagina = len(datos)
+        if regs_pagina > 0:
+            prom_t = total_temp / regs_pagina
+            prom_h = total_hum / regs_pagina
             self.lbl_temp_prom.configure(text=f"{prom_t:.1f} °C", text_color="#3498db" if prom_t < 15 else "#2ecc71" if prom_t < 29 else "#e74c3c")
             self.lbl_hum_prom.configure(text=f"{prom_h:.1f} %", text_color="#f1c40f" if prom_h < 40 else "#3498db" if prom_h <= 80 else "#e74c3c")
         else:
@@ -1165,64 +1213,6 @@ class VentanaInvernadero:
             self.lbl_luz_prom.configure(text="-- Lx", text_color="white")
             
         self.lbl_total_reg.configure(text=str(total_reg), text_color="white")
-        
-    def agregar_lectura_a_tabla(self, t, h, luz, v, r, led):
-        now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        v_str = "ON" if v else "OFF"
-        r_str = "ON" if r else "OFF"
-        
-        # Obtener el número actual de filas para alternar colores de fila
-        num_filas = len(self.tree.get_children())
-        tag = 'evenrow' if num_filas % 2 == 0 else 'oddrow'
-        
-        # Insertar al final del treeview
-        self.tree.insert("", "end", values=(now_str, f"{t:.1f}", f"{h:.1f}", f"{luz:.0f}", v_str, r_str, f"{led:.0f}%"), tags=(tag,))
-        
-        # Mantener un límite de 500 filas en la interfaz para evitar degradación de rendimiento
-        children = self.tree.get_children()
-        if len(children) > 500:
-            self.tree.delete(children[0])
-            
-        # Actualizar las estadísticas de la UI de forma rápida
-        datos = self.persistencia.consultar_historial()
-        total_reg = len(datos)
-        if total_reg > 0:
-            total_temp = 0.0
-            total_hum = 0.0
-            total_luz = 0.0
-            count_luz = 0
-            for row in datos:
-                try:
-                    rt = float(row.get("Temperatura_C") or 0)
-                    rh = float(row.get("Humedad_Pct") or 0)
-                    rluz = float(row.get("Luminosidad_Lux") or 0)
-                    
-                    total_temp += rt
-                    total_hum += rh
-                    
-                    fecha = row.get("Fecha_Hora", "--")
-                    dt = datetime.datetime.strptime(fecha, "%Y-%m-%d %H:%M:%S")
-                    if 6 <= dt.hour < 18:
-                        total_luz += rluz
-                        count_luz += 1
-                except Exception:
-                    pass
-                    
-            prom_t = total_temp / total_reg
-            prom_h = total_hum / total_reg
-            self.lbl_temp_prom.configure(text=f"{prom_t:.1f} °C", text_color="#3498db" if prom_t < 15 else "#2ecc71" if prom_t < 29 else "#e74c3c")
-            self.lbl_hum_prom.configure(text=f"{prom_h:.1f} %", text_color="#f1c40f" if prom_h < 40 else "#3498db" if prom_h <= 80 else "#e74c3c")
-            
-            if count_luz > 0:
-                prom_luz = total_luz / count_luz
-                self.lbl_luz_prom.configure(text=f"{prom_luz:.0f} Lx", text_color="#95a5a6" if prom_luz < 2000 else "#f1c40f" if prom_luz <= 8500 else "#e74c3c")
-            else:
-                self.lbl_luz_prom.configure(text="-- Lx", text_color="white")
-                
-            self.lbl_total_reg.configure(text=str(total_reg), text_color="white")
-
-    def exportar_resumen(self):
-        messagebox.showinfo("Exportar Resumen", "El reporte en PDF ha sido generado y exportado con éxito.")
 
     def animar_alerta(self):
         if not self.alerta_activa:
@@ -1264,7 +1254,7 @@ class VentanaInvernadero:
         
         if hacer_refresco_pesado:
             self.ultimo_refresco_pesado = ahora_real
-            self.persistencia.registrar_lectura(t, h, v, r, luz, intensidad_luz)
+            self.ctrl.registrar_lectura(t, h, v, r, luz, intensidad_luz)
         
         self.clock_label.configure(text=hora_actual.strftime("%I:%M:%S %p"))
         if hasattr(self, 'lbl_dia_virtual'):
@@ -1523,11 +1513,7 @@ class VentanaInvernadero:
             self.alerta_activa = False
             self.target_rgb = [46, 204, 113] # #2ecc71 (Verde sano)
             
-        # Auto-refrescar la tabla y métricas del registro histórico de forma optimizada y fluida
-        if hacer_refresco_pesado:
-            self.agregar_lectura_a_tabla(t, h, luz, v, r, intensidad_luz)
-        
-        delay = max(40, int(2000 / self.ctrl.multiplicador_tiempo))
+        delay = 7000
         self.root.after(delay, self.actualizar)
 
     def cerrar_programa(self):
