@@ -1032,7 +1032,7 @@ class VentanaInvernadero:
         self.lbl_total_reg = create_stat_card(resumen_frame, "TOTAL REGISTROS", 0)
         self.lbl_temp_prom = create_stat_card(resumen_frame, "TEMP. PROMEDIO", 1)
         self.lbl_hum_prom  = create_stat_card(resumen_frame, "HUM. PROMEDIO", 2)
-        self.lbl_luz_prom  = create_stat_card(resumen_frame, "LUZ PROM (6a-6p)", 3)
+        self.lbl_luz_prom  = create_stat_card(resumen_frame, "LUZ PROM", 3)
         
         # 2. Tabla con scroll vertical Y horizontal
         table_outer = ctk.CTkFrame(self.tab_historico, corner_radius=10, fg_color="#2b2b2b")
@@ -1227,7 +1227,7 @@ class VentanaInvernadero:
         
         if count_luz > 0:
             prom_luz = total_luz / count_luz
-            self.lbl_luz_prom.configure(text=f"{prom_luz:.0f} Lx", text_color="#95a5a6" if prom_luz < 2000 else "#f1c40f" if prom_luz <= 8500 else "#e74c3c")
+            self.lbl_luz_prom.configure(text=f"{prom_luz:.0f} Lx", text_color="#95a5a6" if prom_luz < 1000 else "#f1c40f" if prom_luz <= 45000 else "#e74c3c")
         else:
             self.lbl_luz_prom.configure(text="-- Lx", text_color="white")
             
