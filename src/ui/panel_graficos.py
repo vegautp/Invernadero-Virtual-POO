@@ -10,10 +10,9 @@ class PanelMonitoreoGrafico:
     Panel modular para el monitoreo gráfico de sensores y actuadores.
     Utiliza un ciclo de actualización independiente cada 10 segundos.
     """
-    def __init__(self, master: ctk.CTkFrame, obtener_datos_cb: Callable[[], Tuple], switch_var: ctk.StringVar):
+    def __init__(self, master: ctk.CTkFrame, obtener_datos_cb: Callable[[], Tuple]):
         self.master = master
         self.obtener_datos_cb = obtener_datos_cb
-        self.switch_var = switch_var
         
         # Buffers de datos (Max 60 elementos, 60 * 10s = 10 minutos de historial local)
         self.max_len = 60
@@ -57,14 +56,9 @@ class PanelMonitoreoGrafico:
         Aplica o re-aplica los títulos descriptivos, labels y colores a los ejes.
         Debe llamarse DESPUÉS de hacer ax.clear() y ax.plot() para no perder el formato.
         """
-        if self.switch_var.get() == "dark":
-            fig_bg = '#2b2b2b'
-            ax_bg = '#3b3b3b'
-            text_color = 'white'
-        else:
-            fig_bg = '#f0f0f0'
-            ax_bg = '#ffffff'
-            text_color = 'black'
+        fig_bg = '#2b2b2b'
+        ax_bg = '#3b3b3b'
+        text_color = 'white'
 
         self.fig.patch.set_facecolor(fig_bg)
         
@@ -140,8 +134,8 @@ class PanelMonitoreoGrafico:
                 self.configurar_ejes()
 
                 # 5. Volver a mostrar las leyendas
-                face_bg = '#2b2b2b' if self.switch_var.get() == "dark" else '#f0f0f0'
-                text_c = 'white' if self.switch_var.get() == "dark" else 'black'
+                face_bg = '#2b2b2b'
+                text_c = 'white'
                 for ax in self.axs:
                     ax.legend(facecolor=face_bg, edgecolor=text_c, labelcolor=text_c, loc="upper left")
 

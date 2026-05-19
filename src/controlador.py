@@ -60,26 +60,34 @@ class Controlador:
             
         hora_actual = self.tiempo_simulado
         
-        # 1. Actualizar clima exterior y obtener pronóstico
-        self.motor_clima.actualizar_clima(hora_actual)
+        # 1. Actualizar clima exterior y obtener pronóstico (Omitir inercia si hay salto)
+        salto = getattr(self, 'salto_temporal', False)
+        self.motor_clima.actualizar_clima(hora_actual, salto_temporal=salto)
         
         # 2. Ciclo Día/Noche y Luz Natural Base
         es_de_dia = 6 <= hora_actual.hour < 18
         estado_fotoperiodo = 0 <= hora_actual.hour < 7 # Descanso de 00:00 a 07:00
         
         if es_de_dia:
-            # Curva Solar Asimétrica: Sale a las 6:00, Pico máximo a las 14:00 (calores tremendos), Ocaso a las 18:00
+            # Curva Solar ligada matemáticamente a la curva de temperatura exterior
             hora_f = hora_actual.hour + (hora_actual.minute / 60.0)
-            if hora_f <= 14.0:
-                frac = (hora_f - 6.0) / 8.0
-                factor_solar = math.sin(frac * (math.pi / 2))
+            if 6.0 <= hora_f < 12.0:
+                frac = (hora_f - 6.0) / 6.0
+                factor_diario = -1.0 + math.sin(frac * math.pi / 2) * 2.0
+            elif 12.0 <= hora_f <= 15.0:
+                frac = (hora_f - 12.0) / 3.0
+                factor_diario = 1.0 - (0.1 * frac)
+            elif 15.0 < hora_f <= 18.0:
+                frac = (hora_f - 15.0) / 3.0
+                factor_diario = -1.0 + 1.9 * math.cos(frac * math.pi / 2)
             else:
-                frac = (hora_f - 14.0) / 4.0
-                factor_solar = math.cos(frac * (math.pi / 2))
+                factor_diario = -1.0
                 
-            # Ensanchamos la campana para mantener buena radiación (buenos Lx) desde temprano y altas temperaturas a medio día
-            factor_solar = factor_solar ** 0.5
-            if factor_solar < 0: factor_solar = 0.0
+            # factor_diario va de -1.0 a 1.0. Convertimos a porcentaje de 0.0 a 1.0
+            factor_solar = max(0.0, (factor_diario + 1.0) / 2.0)
+            
+            # Hacemos que la luz sea más sensible y caiga un poco antes que el calor residual
+            factor_solar = factor_solar ** 1.5
             
             lux_por_clima = {
                 "Soleado":    60000.0,
@@ -95,21 +103,24 @@ class Controlador:
             luz_natural = (factor_solar * max_lux) + random.uniform(-500, 500)
             luz_natural = max(0.0, luz_natural)
         else:
-            luz_natural = 0.0
+            # Durante la noche la luz no es 0 total, simulamos la luz de la luna o resplandor ambiente (~25 Lx a 40 Lx)
+            luz_natural = 25.0 + random.uniform(0.0, 15.0)
             
         # 3. Lógica de Control Proporcional (Potencia Objetivo o Esfuerzo)
         t_actual = self.temp.valor
         h_actual = self.hum.valor
         
+        t_ext_actual = self.motor_clima.temp_exterior
+        
         # --- Malla de Sombreo (Polisombra 50% Automática) ---
         # Lógica de histéresis amplia para evitar oscilaciones
         if not self.malla_desplegada:
-            # Desplegar si la temperatura supera los 27°C y hay radiación solar activa
-            if t_actual > 27.0 and luz_natural > 30000.0:
+            # Desplegar si la temperatura interior es alta, hay mucha luz solar Y la temperatura exterior justifica no solo ventilar
+            if t_actual > 27.0 and luz_natural > 35000.0 and t_ext_actual > 25.0:
                 self.malla_desplegada = True
         else:
-            # Recoger si la temperatura baja de 24°C o la luz natural desaparece
-            if t_actual < 24.0 or luz_natural < 15000.0:
+            # Recoger si la temperatura interior está controlada, bajó la luz o afuera refrescó lo suficiente
+            if t_actual < 25.0 or luz_natural < 20000.0 or t_ext_actual <= 24.0:
                 self.malla_desplegada = False
                 
         # Impacto físico INMEDIATO de la malla en la luz:
@@ -167,12 +178,13 @@ class Controlador:
         t_ext = self.motor_clima.temp_exterior
         
         # Setpoint dinámico de ventilación
-        # En climas fríos, aprovechamos el calor como "batería térmica" y no ventilamos hasta los 30°C.
-        # En climas normales o calurosos (Soleado, Nublado), ventilamos desde los 26°C para mantener frescura.
+        # Se armoniza con la temperatura exterior para evitar ventilación excesiva si afuera ya hace buen clima
         if self.motor_clima.estado_actual in ["Frío", "Tormenta", "Lluvia"] or t_ext < 16.0:
             setpoint_vent = 30.0
         else:
-            setpoint_vent = 26.0
+            # Si afuera hace 25°C, permitimos que el invernadero esté unos grados por encima 
+            # del clima exterior antes de encender ventiladores a toda marcha.
+            setpoint_vent = max(28.0, t_ext + 4.0)
         
         # Calefacción (Estabilidad y Estado Estacionario)
         if t_actual < setpoint_calefaccion:
@@ -186,15 +198,14 @@ class Controlador:
         else:
             self.calefaccion.esfuerzo = 0.0
             
-        # Ventilador (Histéresis Térmica / Tiempo Muerto para evitar encendidos en falso)
+        # Ventilador (Setpoints fijos solicitados con amplio tiempo muerto)
         if getattr(self, 'malla_desplegada', False):
-            # Lógica especial cuando la malla está desplegada (condiciones de calor extremo)
-            setpoint_encendido = 33.0
-            setpoint_apagado = 26.0
+            setpoint_encendido = 28.0
+            setpoint_apagado = 25.0
         else:
-            # Por defecto, ventila normal. Con histéresis: Enciende a setpoint+1, Apaga a setpoint-1.5.
-            setpoint_encendido = setpoint_vent + 1.0
-            setpoint_apagado = setpoint_vent - 1.5
+            # Sin malla: enciende a 28°C y apaga hasta los 24°C (histéresis de 4°C)
+            setpoint_encendido = 28.0
+            setpoint_apagado = 24.0
         
         if not self.enfriando:
             if t_actual > setpoint_encendido:
@@ -247,7 +258,8 @@ class Controlador:
             
         max_delta_por_ciclo = 5.0  # Los motores suben/bajan máximo 5% por ciclo
         
-        self.iluminacion.intensidad = ramp_up(self.iluminacion.intensidad, self.iluminacion.esfuerzo, max_delta_por_ciclo)
+        # La luz LED no tiene inercia mecánica, se enciende y apaga de forma instantánea
+        self.iluminacion.intensidad = self.iluminacion.esfuerzo
         self.iluminacion.encendido = self.iluminacion.intensidad > 0
         
         self.calefaccion.potencia = ramp_up(self.calefaccion.potencia, self.calefaccion.esfuerzo, max_delta_por_ciclo)
@@ -262,6 +274,17 @@ class Controlador:
         self.riego.encendido = self.riego.potencia > 0
         
         if getattr(self, 'salto_temporal', False):
+            # Forzamos un equilibrio físico instantáneo para que el usuario no tenga que esperar
+            # a que el invernadero se caliente o enfríe tras un "viaje en el tiempo" drástico.
+            t_ext_actual = self.motor_clima.temp_exterior
+            h_ext_actual = self.motor_clima.hum_exterior
+            if es_de_dia and luz_natural > 20000.0:
+                self.temp.valor = t_ext_actual + 3.0  # Calor solar simulado instantáneo
+                self.hum.valor = max(30.0, h_ext_actual - 5.0)
+            else:
+                self.temp.valor = t_ext_actual + 1.0  # Ligeramente más cálido por aislamiento
+                self.hum.valor = h_ext_actual
+                
             self.salto_temporal = False
 
         # 5. Inercia Física Termodinámica (Deltas acumulativos)
@@ -275,8 +298,9 @@ class Controlador:
         h_ext = self.motor_clima.hum_exterior
         
         # A. Inercia pasiva (Fugas térmicas del invernadero hacia el exterior)
-        # Equilibrio de aislamiento optimizado: disipa calor sobrante en días opacos, pero retiene calor en frío.
-        delta_temp += (t_ext - t_actual) * 0.032 * factor_inercia
+        # Aumentamos la disipación térmica (de 0.032 a 0.08) para que el invernadero
+        # mantenga su temperatura mucho más ligada a la exterior (menor brecha / delta).
+        delta_temp += (t_ext - t_actual) * 0.08 * factor_inercia
         # Infiltración pasiva de humedad: muy reducida en días calurosos (invernadero bien sellado).
         # En días fríos/lluviosos hay algo más de filtración natural.
         if t_ext > 28.0:
@@ -304,7 +328,9 @@ class Controlador:
             }
             factor_ir = atenuacion_ir.get(self.motor_clima.estado_actual, 1.0)
             
-            calor_solar = (luz_natural / 60000.0) * 4.5 * factor_ir
+            # El multiplicador original de 4.5 provocaba un aumento antinatural a 33°C a las 10 a.m.
+            # Se ha bajado a 0.8, generando un delta máximo térmico realista de ~15 a 20°C sobre la temp ambiente.
+            calor_solar = (luz_natural / 60000.0) * 0.8 * factor_ir
             
             # Corte de Energía Térmica por la Malla de Sombreo
             if self.malla_desplegada:
@@ -400,6 +426,9 @@ class Controlador:
         alerta = self.planta.evaluar_condiciones(t, h, luz=luz_total_percibida, multiplicador=self.multiplicador_tiempo, es_de_dia=es_de_dia, estado_fotoperiodo=estado_fotoperiodo)
         
         t_ext = round(self.motor_clima.temp_exterior, 1)
+        h_ext = round(self.motor_clima.hum_exterior, 1)
+        
+        return hora_actual, t, h, round(luz_total_percibida, 2), self.vent.encendido, self.riego.encendido, round(self.iluminacion.intensidad, 2), self.calefaccion.encendido, round(self.calefaccion.potencia, 2), self.planta.porcentaje_crecimiento, alerta, pronostico, t_ext, h_ext, self.vent.esfuerzo, self.riego.esfuerzo, self.iluminacion.esfuerzo, self.calefaccion.esfuerzo, estado_fotoperiodo
         h_ext = round(self.motor_clima.hum_exterior, 1)
         
         return hora_actual, t, h, round(luz_total_percibida, 2), self.vent.encendido, self.riego.encendido, round(self.iluminacion.intensidad, 2), self.calefaccion.encendido, round(self.calefaccion.potencia, 2), self.planta.porcentaje_crecimiento, alerta, pronostico, t_ext, h_ext, self.vent.esfuerzo, self.riego.esfuerzo, self.iluminacion.esfuerzo, self.calefaccion.esfuerzo, estado_fotoperiodo

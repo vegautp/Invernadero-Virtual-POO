@@ -57,7 +57,7 @@ class VentanaInvernadero:
         self.root.grid_columnconfigure(0, weight=1)
         self.root.grid_rowconfigure(1, weight=1)
 
-        self.switch_var = ctk.StringVar(value="dark")
+
         self.setup_header()
         
         self.tabview = ctk.CTkTabview(self.root)
@@ -129,16 +129,7 @@ class VentanaInvernadero:
         )
         self.clock_label.grid(row=0, column=1, rowspan=3)
         
-        self.theme_switch = ctk.CTkSwitch(
-            self.header_frame, 
-            text="Modo Oscuro", 
-            command=self.toggle_theme,
-            variable=self.switch_var, 
-            onvalue="dark", 
-            offvalue="light",
-            font=("Roboto", 14)
-        )
-        self.theme_switch.grid(row=0, column=2, rowspan=3, sticky="e", padx=10)
+
         
         self.btn_abrir_banner = ctk.CTkButton(
             self.header_frame,
@@ -264,8 +255,8 @@ class VentanaInvernadero:
         self.scroll_actual = ctk.CTkScrollableFrame(self.tab_actual, fg_color="transparent")
         self.scroll_actual.pack(fill="both", expand=True, padx=5, pady=5)
 
-        bg_card = ("#e8e8e8", "#2a2d2e")
-        bg_canvas = "#2a2d2e" if self.switch_var.get() == "dark" else "#e8e8e8"
+        bg_card = "#2a2d2e"
+        bg_canvas = "#2a2d2e"
 
         # --- SECCIÓN 1 (Exterior) ---
         lbl_sec1 = ctk.CTkLabel(self.scroll_actual, text="🌎 ENTORNO EXTERIOR", font=("Arial", 12, "bold"), text_color="gray", anchor="w")
@@ -351,7 +342,7 @@ class VentanaInvernadero:
         self.interior_container.pack(fill="x", padx=15, pady=(5, 5))
         self.interior_container.grid_columnconfigure((0, 1, 2), weight=1)
 
-        self.card_t, self.lbl_t_val, self.cv_temp = create_card(self.interior_container, 0, 0, "Temperatura", "Física: Sube de día por radiación. Baja de noche hacia 15°C.\nAzul: < 15°C | Verde: 15°C a 28°C | Rojo: > 28°C")
+        self.card_t, self.lbl_t_val, self.cv_temp = create_card(self.interior_container, 0, 0, "Temperatura", "Física: Sube de día por radiación. Baja de noche hacia 15°C.\nAzul: < 15°C | Verde: 15°C a 29°C | Rojo: >= 29°C")
         self.card_h, self.lbl_h_val, self.cv_hum = create_card(self.interior_container, 0, 1, "Humedad", "Física: Baja (se evapora) cuando la temperatura sube. Sube con frío.\nAmarillo: < 40% | Azul: 40% a 80% | Rojo: > 80%")
         self.card_luz, self.lbl_luz_val, self.cv_luz = create_card(self.interior_container, 0, 2, "Luminosidad", "Agronomía: Rango de luz útil para la fotosíntesis.\nGris: < 1,000 Lx | Amarillo: 1,001 Lx a 45,000 Lx | Rojo: > 45,000 Lx")
         
@@ -501,7 +492,7 @@ class VentanaInvernadero:
 
     def draw_temp(self, t):
         self.cv_temp.delete("all")
-        color = "#3498db" if t < 15 else "#2ecc71" if t <= 28 else "#e74c3c"
+        color = "#3498db" if t < 15 else "#2ecc71" if t < 29 else "#e74c3c"
         
         self.cv_temp.create_oval(25, 52, 45, 72, outline="#bdc3c7", width=2) 
         self.cv_temp.create_line(30, 54, 30, 5, fill="#bdc3c7", width=2) 
@@ -785,8 +776,7 @@ class VentanaInvernadero:
         # Instanciar el nuevo panel gráfico independiente
         self.panel_grafico = PanelMonitoreoGrafico(
             master=self.tab_grafico,
-            obtener_datos_cb=self.obtener_datos_actuales,
-            switch_var=self.switch_var
+            obtener_datos_cb=self.obtener_datos_actuales
         )
 
     def obtener_datos_actuales(self):
@@ -862,7 +852,7 @@ class VentanaInvernadero:
         lbl_motor.pack(pady=(10, 5))
 
         # Integración del canvas al nuevo fondo premium
-        bg_canvas = "#1A1D26" if self.switch_var.get() == "dark" else "#e8e8e8"
+        bg_canvas = "#1A1D26"
         self.cv_planta = tk.Canvas(right_panel, width=300, height=250, bg=bg_canvas, highlightthickness=0)
         self.cv_planta.pack(pady=10)
 
@@ -1030,7 +1020,7 @@ class VentanaInvernadero:
         if total_reg > 0:
             prom_t = total_temp / total_reg
             prom_h = total_hum / total_reg
-            self.lbl_temp_prom.configure(text=f"{prom_t:.1f} °C", text_color="#3498db" if prom_t < 15 else "#2ecc71" if prom_t <= 28 else "#e74c3c")
+            self.lbl_temp_prom.configure(text=f"{prom_t:.1f} °C", text_color="#3498db" if prom_t < 15 else "#2ecc71" if prom_t < 29 else "#e74c3c")
             self.lbl_hum_prom.configure(text=f"{prom_h:.1f} %", text_color="#f1c40f" if prom_h < 40 else "#3498db" if prom_h <= 80 else "#e74c3c")
         else:
             self.lbl_temp_prom.configure(text="-- °C", text_color="white")
@@ -1088,7 +1078,7 @@ class VentanaInvernadero:
                     
             prom_t = total_temp / total_reg
             prom_h = total_hum / total_reg
-            self.lbl_temp_prom.configure(text=f"{prom_t:.1f} °C", text_color="#3498db" if prom_t < 15 else "#2ecc71" if prom_t <= 28 else "#e74c3c")
+            self.lbl_temp_prom.configure(text=f"{prom_t:.1f} °C", text_color="#3498db" if prom_t < 15 else "#2ecc71" if prom_t < 29 else "#e74c3c")
             self.lbl_hum_prom.configure(text=f"{prom_h:.1f} %", text_color="#f1c40f" if prom_h < 40 else "#3498db" if prom_h <= 80 else "#e74c3c")
             
             if count_luz > 0:
@@ -1118,34 +1108,7 @@ class VentanaInvernadero:
             
         self.root.after(500, self.animar_alerta)
 
-    def toggle_theme(self):
-        if self.switch_var.get() == "dark":
-            ctk.set_appearance_mode("dark")
-            self.theme_switch.configure(text="Modo Oscuro")
-            self.fig.patch.set_facecolor('#2b2b2b')
-            canvas_bg = "#2a2d2e"
-        else:
-            ctk.set_appearance_mode("light")
-            self.theme_switch.configure(text="Modo Claro")
-            if hasattr(self, 'fig'):
-                self.fig.patch.set_facecolor('#f0f0f0')
-            canvas_bg = "#e8e8e8"
 
-        self.cv_temp.configure(bg=canvas_bg)
-        self.cv_hum.configure(bg=canvas_bg)
-        self.cv_luz.configure(bg=canvas_bg)
-        self.cv_vent.configure(bg=canvas_bg)
-        self.cv_riego.configure(bg=canvas_bg)
-        self.cv_ilum.configure(bg=canvas_bg)
-        self.cv_calef.configure(bg=canvas_bg)
-        self.cv_malla.configure(bg=canvas_bg)
-        
-        cv_planta_bg = "#1A1D26" if self.switch_var.get() == "dark" else canvas_bg
-        self.cv_planta.configure(bg=cv_planta_bg)
-
-        if hasattr(self, 'panel_grafico'):
-            self.panel_grafico.configurar_ejes()
-            self.panel_grafico.canvas_plot.draw()
 
     def actualizar(self):
         """Ciclo principal de UI: Obtiene datos del controlador y actualiza GUI/Gráfica."""
@@ -1200,7 +1163,7 @@ class VentanaInvernadero:
         
         # Temp logic
         if t < 15: t_color = "#3498db"
-        elif t <= 28: t_color = "#2ecc71"
+        elif t < 29: t_color = "#2ecc71"
         else: t_color = "#e74c3c"
             
         self.lbl_t_val.configure(text=f"{t:.1f} °C", text_color=t_color)

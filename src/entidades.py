@@ -155,9 +155,9 @@ class MotorClimatico:
     # ── Utilidades internas ──────────────────────────────────────────────────
     @staticmethod
     def _bloque(hora: int) -> int:
-        """0 = Madrugada 00-05 | 1 = Día 06-16 | 2 = Noche 17-23"""
+        """0 = Madrugada 00-05 | 1 = Día 06-17 | 2 = Noche 18-23"""
         if hora < 6:   return 0
-        if hora < 17:  return 1
+        if hora < 18:  return 1
         return 2
 
     def _transicionar(self, es_noche: bool) -> str:
@@ -183,7 +183,7 @@ class MotorClimatico:
         )[0]
 
     # ── API pública ──────────────────────────────────────────────────────────
-    def actualizar_clima(self, hora_actual):
+    def actualizar_clima(self, hora_actual, salto_temporal=False):
         hora   = hora_actual.hour
         bloque = self._bloque(hora)
 
@@ -193,25 +193,58 @@ class MotorClimatico:
             self.estado_actual = self._transicionar(es_noche)
             self.bloque_actual = bloque
 
-        self.actualizar_clima_exterior(hora_actual)
+        self.actualizar_clima_exterior(hora_actual, salto_temporal)
 
-    def actualizar_clima_exterior(self, hora_actual):
-        hora = hora_actual.hour
+    def actualizar_clima_exterior(self, hora_actual, salto_temporal=False):
+        hora_float = hora_actual.hour + hora_actual.minute / 60.0
         p = self.PARAMS.get(self.estado_actual, self.PARAMS["Nublado"])
 
-        # Ciclo higrotérmico diario: pico de calor a las 14:00
-        factor_diario = math.cos((hora - 14) * 2 * math.pi / 24)
+        # Curva térmica realista solicitada: sube hasta 12, se sostiene hasta 15, cae hasta 18
+        if 6.0 <= hora_float < 12.0:
+            frac = (hora_float - 6.0) / 6.0
+            factor_diario = -1.0 + math.sin(frac * math.pi / 2) * 2.0
+        elif 12.0 <= hora_float <= 15.0:
+            frac = (hora_float - 12.0) / 3.0
+            factor_diario = 1.0 - (0.1 * frac)
+        elif 15.0 < hora_float <= 18.0:
+            frac = (hora_float - 15.0) / 3.0
+            factor_diario = -1.0 + 1.9 * math.cos(frac * math.pi / 2)
+        else:
+            if hora_float > 18.0:
+                h_noche = hora_float - 18.0
+            else:
+                h_noche = hora_float + 6.0
+            frac = h_noche / 12.0
+            factor_diario = -1.0 - math.sin(frac * math.pi) * 0.2
 
-        self.temp_exterior = (
+        target_temp = (
             p["temp_base"]
             + factor_diario * p["oscilacion"]
             + random.uniform(-0.4, 0.4)
         )
-        self.hum_exterior = (
+        target_hum = (
             p["hum_base"]
             - factor_diario * p["oscilacion"] * 1.5
             + random.uniform(-0.8, 0.8)
         )
+
+        # Inercia térmica ambiental progresiva
+        if salto_temporal or not hasattr(self, 'temp_exterior_target'):
+            self.temp_exterior = target_temp
+            self.hum_exterior = target_hum
+            
+        self.temp_exterior_target = target_temp
+        self.hum_exterior_target = target_hum
+        
+        if self.temp_exterior < self.temp_exterior_target:
+            self.temp_exterior += min(0.05, self.temp_exterior_target - self.temp_exterior)
+        elif self.temp_exterior > self.temp_exterior_target:
+            self.temp_exterior -= min(0.05, self.temp_exterior - self.temp_exterior_target)
+            
+        if self.hum_exterior < self.hum_exterior_target:
+            self.hum_exterior += min(0.1, self.hum_exterior_target - self.hum_exterior)
+        elif self.hum_exterior > self.hum_exterior_target:
+            self.hum_exterior -= min(0.1, self.hum_exterior - self.hum_exterior_target)
 
         self.temp_exterior = max(-5.0, min(48.0, self.temp_exterior))
         self.hum_exterior  = max(10.0, min(100.0, self.hum_exterior))
