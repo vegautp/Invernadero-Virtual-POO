@@ -67,7 +67,7 @@ class Controlador:
 
     def procesar(self):
         ahora = datetime.datetime.now()
-        dt_sec = (ahora - self.ultimo_tick).total_seconds()
+        dt_sec = min(0.5, (ahora - self.ultimo_tick).total_seconds())
         self.ultimo_tick = ahora
         
         if not getattr(self, 'tiempo_manual', False):

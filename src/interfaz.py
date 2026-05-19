@@ -1374,7 +1374,8 @@ class VentanaInvernadero:
         self.clock_label.configure(text=hora_actual.strftime("%I:%M:%S %p"))
         if hasattr(self, 'lbl_dia_virtual'):
             self.lbl_dia_virtual.configure(text=f"Día Virtual: {self.ctrl.dia_virtual}")
-        self.root.after(1000, self._tick_reloj)
+        delay_reloj = int(1000 / max(1.0, self.ctrl.multiplicador_tiempo))
+        self.root.after(max(20, delay_reloj), self._tick_reloj)
 
     def actualizar(self):
         """Ciclo principal de UI: Obtiene datos del controlador y actualiza GUI/Gráfica."""
@@ -1664,8 +1665,8 @@ class VentanaInvernadero:
             self.alerta_activa = False
             self.target_rgb = [46, 204, 113] # #2ecc71 (Verde sano)
             
-        delay = 1000
-        self.root.after(delay, self.actualizar)
+        delay = int(1000 / max(1.0, self.ctrl.multiplicador_tiempo))
+        self.root.after(max(20, delay), self.actualizar)
 
     def cerrar_programa(self):
         try:
