@@ -41,12 +41,20 @@ class Planta:
     """Clase para simular el crecimiento y estado de estrés fisiológico de la planta."""
     def __init__(self):
         self.porcentaje_crecimiento = 0.0
+        self.plantada = True
+
+    def plantar(self):
+        self.porcentaje_crecimiento = 0.0
+        self.plantada = True
+
+    def cosechar(self):
+        self.porcentaje_crecimiento = 0.0
+        self.plantada = False
 
     def evaluar_condiciones(self, temp, hum, luz=None, multiplicador=1.0, es_de_dia=True, estado_fotoperiodo=False):
-        """
-        Evalúa las condiciones ambientales y actualiza el crecimiento basándose en
-        principios de fisiología vegetal.
-        """
+        if not self.plantada:
+            return "Esperando siembra..."
+            
         alerta = ""
         
         # Requerimientos Dinámicos según Etapa
@@ -59,6 +67,15 @@ class Planta:
             
         limite_estres_lux = 65000.0
         
+        # Inmunidad de Frontera (Punto Muerto)
+        # Suspende temporalmente penalizaciones si la planta apenas evolucionó a una nueva etapa
+        en_frontera = False
+        fronteras = [(20.0, 21.0), (40.0, 41.0), (70.0, 71.0), (90.0, 91.0)]
+        for inferior, superior in fronteras:
+            if inferior < self.porcentaje_crecimiento <= superior:
+                en_frontera = True
+                break
+        
         # Validaciones de estrés (prioridad biológica)
         if temp > 30.0:
             alerta = "Peligro de deshidratación y estrés térmico"
@@ -68,8 +85,18 @@ class Planta:
             alerta = "Transpiración excesiva, estrés hídrico inminente"
         elif luz is not None and luz > limite_estres_lux:
             alerta = "Peligro: Estrés lumínico severo (Cierre de estomas)"
-        elif luz is not None and es_de_dia and not estado_fotoperiodo and luz < (ideal_lux * 0.7):
-            alerta = "Luz natural insuficiente para la etapa actual"
+        elif luz is not None and not estado_fotoperiodo:
+            # Respetamos el periodo de descanso biológico (estado_fotoperiodo = True).
+            # Fuera de ese horario, si falta luz y NO estamos en inmunidad de frontera, penalizamos.
+            if luz < (ideal_lux * 0.7):
+                if not en_frontera:
+                    alerta = f"Luz insuficiente para la etapa actual"
+
+        # Determinar piso biológico (Bloqueo de Involución)
+        piso_biologico = 0.0
+        for umbral in [20.0, 40.0, 70.0, 90.0]:
+            if self.porcentaje_crecimiento > umbral:
+                piso_biologico = umbral + 0.001
 
         # Simulación de crecimiento
         if alerta:
@@ -80,8 +107,8 @@ class Planta:
             else:
                 self.porcentaje_crecimiento += 0.01 * multiplicador
                 
-        # Límites biológicos del ciclo de vida
-        self.porcentaje_crecimiento = max(0.0, min(100.0, self.porcentaje_crecimiento))
+        # Límites biológicos del ciclo de vida y Bloqueo Antirretroceso
+        self.porcentaje_crecimiento = max(piso_biologico, min(100.0, self.porcentaje_crecimiento))
             
         return alerta
 

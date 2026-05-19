@@ -31,10 +31,17 @@ class Controlador:
         self.multiplicador_tiempo = 1.0
         self.tiempo_manual = False
         self.salto_temporal = False
+        self.dia_virtual = 1
         
     def fijar_hora_manual(self, hora, minuto=0):
+        # Si saltamos a una hora "anterior" a la actual, asumimos que avanzamos al día siguiente
+        hora_int = int(hora)
+        if hora_int < self.tiempo_simulado.hour:
+            self.dia_virtual += 1
+            self.tiempo_simulado += datetime.timedelta(days=1)
+            
         # Al saltar en el tiempo, reemplazamos la hora de forma instantánea sin bucles
-        self.tiempo_simulado = self.tiempo_simulado.replace(hour=int(hora), minute=int(minuto), second=0)
+        self.tiempo_simulado = self.tiempo_simulado.replace(hour=hora_int, minute=int(minuto), second=0)
         # CRÍTICO: Resetear ultimo_tick de inmediato. 
         # Esto previene que el dt_sec de la próxima llamada a procesar() 
         # sea gigantesco e intente compensar todo el tiempo "perdido" congelando el programa.
@@ -56,7 +63,10 @@ class Controlador:
         self.ultimo_tick = ahora
         
         if not getattr(self, 'tiempo_manual', False):
+            dia_previo = self.tiempo_simulado.day
             self.tiempo_simulado += datetime.timedelta(seconds=dt_sec * self.multiplicador_tiempo)
+            if self.tiempo_simulado.day != dia_previo:
+                self.dia_virtual += 1
             
         hora_actual = self.tiempo_simulado
         

@@ -121,13 +121,24 @@ class VentanaInvernadero:
         )
         self.estado_solar_label.grid(row=2, column=0, sticky="w", pady=(2, 0))
 
+        clock_container = ctk.CTkFrame(self.header_frame, fg_color="transparent")
+        clock_container.grid(row=0, column=1, rowspan=3, padx=(20, 20))
+        
+        self.lbl_dia_virtual = ctk.CTkLabel(
+            clock_container,
+            text="Día Virtual: 1",
+            font=("Roboto", 13, "bold"),
+            text_color="#3498db"
+        )
+        self.lbl_dia_virtual.pack(anchor="center", pady=(0, 2))
+
         self.clock_label = ctk.CTkLabel(
-            self.header_frame,
+            clock_container,
             text="00:00:00",
             font=("Roboto", 28, "bold"),
             text_color="#f39c12"
         )
-        self.clock_label.grid(row=0, column=1, rowspan=3)
+        self.clock_label.pack(anchor="center")
         
 
         
@@ -672,42 +683,38 @@ class VentanaInvernadero:
             self.cv_malla.create_rectangle(13, 5, W - 13, 16, fill="#95a5a6", outline="")
             self.cv_malla.create_text(W // 2, H // 2 + 8, text="PLEGADA", font=("Helvetica", 8), fill="#7f8c8d")
 
-    def dibujar_planta(self, crecimiento, color_hojas, clima_actual="Soleado"):
+    def dibujar_planta(self, crecimiento, color_hojas, clima_actual="Soleado", plantada=True):
         self.cv_planta.delete("all")
-        w, h, suelo_y = 300, 250, 220
+        w, h, suelo_y = 390, 325, 286
         
         # 1. Dibujar el cielo según el clima y ciclo de luz
         if clima_actual == "Noche":
             self.cv_planta.create_rectangle(0, 0, w, suelo_y, fill="#0b0f19", outline="")
-            # Estrellas y luna
-            self.cv_planta.create_oval(40, 40, 42, 42, fill="#ffffff", outline="")
-            self.cv_planta.create_oval(140, 20, 142, 22, fill="#ffffff", outline="")
-            self.cv_planta.create_oval(250, 70, 252, 72, fill="#ffffff", outline="")
-            self.cv_planta.create_oval(220, 20, 260, 60, fill="#f1c40f", outline="")
+            self.cv_planta.create_oval(52, 52, 55, 55, fill="#ffffff", outline="")
+            self.cv_planta.create_oval(182, 26, 185, 29, fill="#ffffff", outline="")
+            self.cv_planta.create_oval(325, 91, 328, 94, fill="#ffffff", outline="")
+            self.cv_planta.create_oval(286, 26, 338, 78, fill="#f1c40f", outline="")
         elif clima_actual == "Soleado":
             self.cv_planta.create_rectangle(0, 0, w, suelo_y, fill="#5dade2", outline="")
-            # Sol radiante
-            self.cv_planta.create_oval(220, 20, 270, 70, fill="#f39c12", outline="")
-            # Rayos
-            self.cv_planta.create_line(245, 10, 245, 0, fill="#f39c12", width=3)
-            self.cv_planta.create_line(245, 80, 245, 90, fill="#f39c12", width=3)
-            self.cv_planta.create_line(210, 45, 200, 45, fill="#f39c12", width=3)
-            self.cv_planta.create_line(280, 45, 290, 45, fill="#f39c12", width=3)
+            self.cv_planta.create_oval(286, 26, 351, 91, fill="#f39c12", outline="")
+            self.cv_planta.create_line(319, 13, 319, 0, fill="#f39c12", width=3)
+            self.cv_planta.create_line(319, 104, 319, 117, fill="#f39c12", width=3)
+            self.cv_planta.create_line(273, 59, 260, 59, fill="#f39c12", width=3)
+            self.cv_planta.create_oval(286, 26, 351, 91, fill="#f39c12", outline="")
+            self.cv_planta.create_line(364, 59, 377, 59, fill="#f39c12", width=3)
         elif clima_actual == "Nublado":
             self.cv_planta.create_rectangle(0, 0, w, suelo_y, fill="#95a5a6", outline="")
-            # Nubes densas
-            self.cv_planta.create_oval(190, 30, 230, 70, fill="#7f8c8d", outline="")
-            self.cv_planta.create_oval(210, 10, 270, 70, fill="#7f8c8d", outline="")
-            self.cv_planta.create_oval(250, 30, 290, 70, fill="#7f8c8d", outline="")
+            self.cv_planta.create_oval(247, 39, 299, 91, fill="#7f8c8d", outline="")
+            self.cv_planta.create_oval(273, 13, 351, 91, fill="#7f8c8d", outline="")
+            self.cv_planta.create_oval(325, 39, 377, 91, fill="#7f8c8d", outline="")
         elif clima_actual == "Frío":
             self.cv_planta.create_rectangle(0, 0, w, suelo_y, fill="#aed6f1", outline="")
-            # Nube fría con copos
-            self.cv_planta.create_oval(190, 30, 230, 70, fill="#ecf0f1", outline="")
-            self.cv_planta.create_oval(210, 20, 270, 70, fill="#ecf0f1", outline="")
-            self.cv_planta.create_oval(250, 30, 290, 70, fill="#ecf0f1", outline="")
-            self.cv_planta.create_oval(210, 85, 214, 89, fill="#ffffff", outline="")
-            self.cv_planta.create_oval(240, 95, 244, 99, fill="#ffffff", outline="")
-            self.cv_planta.create_oval(270, 80, 274, 84, fill="#ffffff", outline="")
+            self.cv_planta.create_oval(247, 39, 299, 91, fill="#ecf0f1", outline="")
+            self.cv_planta.create_oval(273, 26, 351, 91, fill="#ecf0f1", outline="")
+            self.cv_planta.create_oval(325, 39, 377, 91, fill="#ecf0f1", outline="")
+            self.cv_planta.create_oval(273, 111, 278, 116, fill="#ffffff", outline="")
+            self.cv_planta.create_oval(312, 124, 317, 129, fill="#ffffff", outline="")
+            self.cv_planta.create_oval(351, 104, 356, 109, fill="#ffffff", outline="")
         else:
             self.cv_planta.create_rectangle(0, 0, w, suelo_y, fill="#34495e", outline="")
             
@@ -715,49 +722,52 @@ class VentanaInvernadero:
         self.cv_planta.create_rectangle(0, suelo_y, w, h, fill="#5c4033", outline="")
         self.cv_planta.create_line(0, suelo_y, w, suelo_y, fill="#3e2723", width=4)
         
+        if not plantada:
+            return
+            
         cx = w / 2
         
         # Etapa 1: Semilla a Brote (0 a 20%)
         if crecimiento <= 20:
             progreso = crecimiento / 20.0
-            tallo_h = progreso * 30
+            tallo_h = progreso * 39
             tallo_w = 2 + progreso * 2
             self.cv_planta.create_line(cx, suelo_y, cx, suelo_y - tallo_h, fill=color_hojas, width=tallo_w)
             
             if progreso > 0.3:
-                hoja_s = (progreso - 0.3) * 12
+                hoja_s = (progreso - 0.3) * 15.6
                 self.cv_planta.create_oval(cx, suelo_y - tallo_h, cx - hoja_s, suelo_y - tallo_h + hoja_s, fill=color_hojas, outline="")
                 self.cv_planta.create_oval(cx, suelo_y - tallo_h, cx + hoja_s, suelo_y - tallo_h + hoja_s, fill=color_hojas, outline="")
                 
         # Etapa 2: Plántula (21% a 60%)
         elif crecimiento <= 60:
             progreso = (crecimiento - 20) / 40.0
-            tallo_h = 30 + progreso * 80
+            tallo_h = 39 + progreso * 104
             tallo_w = 4 + progreso * 4
             self.cv_planta.create_line(cx, suelo_y, cx, suelo_y - tallo_h, fill="#27ae60", width=tallo_w, capstyle="round")
             
-            h1_s = 8 + progreso * 15
-            self.cv_planta.create_oval(cx, suelo_y - 25, cx - h1_s*2, suelo_y - 25 + h1_s, fill=color_hojas, outline="")
-            self.cv_planta.create_oval(cx, suelo_y - 25, cx + h1_s*2, suelo_y - 25 + h1_s, fill=color_hojas, outline="")
+            h1_s = 10.4 + progreso * 19.5
+            self.cv_planta.create_oval(cx, suelo_y - 32, cx - h1_s*2, suelo_y - 32 + h1_s, fill=color_hojas, outline="")
+            self.cv_planta.create_oval(cx, suelo_y - 32, cx + h1_s*2, suelo_y - 32 + h1_s, fill=color_hojas, outline="")
             
             if progreso > 0.2:
-                h2_s = (progreso - 0.2) * 20
-                self.cv_planta.create_oval(cx, suelo_y - tallo_h + 10, cx - h2_s, suelo_y - tallo_h + 10 - h2_s, fill=color_hojas, outline="")
-                self.cv_planta.create_oval(cx, suelo_y - tallo_h + 10, cx + h2_s, suelo_y - tallo_h + 10 - h2_s, fill=color_hojas, outline="")
+                h2_s = (progreso - 0.2) * 26
+                self.cv_planta.create_oval(cx, suelo_y - tallo_h + 13, cx - h2_s, suelo_y - tallo_h + 13 - h2_s, fill=color_hojas, outline="")
+                self.cv_planta.create_oval(cx, suelo_y - tallo_h + 13, cx + h2_s, suelo_y - tallo_h + 13 - h2_s, fill=color_hojas, outline="")
                 
         # Etapa 3: Adulta / Vegetativa (61% a 100%)
         else:
             progreso = (crecimiento - 60) / 40.0
-            tallo_h = 110 + progreso * 30
+            tallo_h = 143 + progreso * 39
             tallo_w = 8
             self.cv_planta.create_line(cx, suelo_y, cx, suelo_y - tallo_h, fill="#27ae60", width=tallo_w, capstyle="round")
             
-            copa_y = suelo_y - tallo_h + 10
-            copa_r = 30 + progreso * 30
+            copa_y = suelo_y - tallo_h + 13
+            copa_r = 39 + progreso * 39
             color_oscuro = "#229954" if color_hojas == "#2ecc71" else color_hojas
             
             self.cv_planta.create_oval(cx - copa_r, copa_y, cx, copa_y + copa_r*0.8, fill=color_oscuro, outline="")
-            self.cv_planta.create_oval(cx, copa_y - 10, cx + copa_r, copa_y + copa_r*0.6, fill=color_oscuro, outline="")
+            self.cv_planta.create_oval(cx, copa_y - 13, cx + copa_r, copa_y + copa_r*0.6, fill=color_oscuro, outline="")
             
             self.cv_planta.create_oval(cx - copa_r*0.9, copa_y - copa_r*1.1, cx + copa_r*0.9, copa_y + copa_r*0.3, fill=color_hojas, outline="")
             self.cv_planta.create_oval(cx - copa_r*1.2, copa_y - copa_r*0.5, cx + copa_r*0.3, copa_y + copa_r*0.6, fill=color_hojas, outline="")
@@ -765,9 +775,10 @@ class VentanaInvernadero:
             
             if crecimiento > 85:
                 alpha = min(1.0, (crecimiento - 85) / 15.0)
-                fruto_r = alpha * 6
-                for fx, fy in [(-20, -10), (15, -25), (25, 10), (-30, 15)]:
+                fruto_r = alpha * 7.8
+                for fx, fy in [(-26, -13), (20, -33), (33, 13), (-39, 20)]:
                     self.cv_planta.create_oval(cx + fx - fruto_r, copa_y + fy - fruto_r, cx + fx + fruto_r, copa_y + fy + fruto_r, fill="#e74c3c", outline="")
+
 
     def setup_tab_grafico(self):
         self.tab_grafico.grid_columnconfigure(0, weight=1)
@@ -818,9 +829,21 @@ class VentanaInvernadero:
         self.lbl_pct = ctk.CTkLabel(progreso_frame, text="Progreso: 0.0%", font=("Roboto", 14, "bold"), text_color="#2ECC71")
         self.lbl_pct.pack(anchor="e")
         
-        self.growth_progressbar = ctk.CTkProgressBar(progreso_frame, height=20, corner_radius=10, progress_color="#2ECC71")
-        self.growth_progressbar.pack(fill="x", pady=(5, 0))
+        self.growth_progressbar = ctk.CTkProgressBar(progreso_frame, height=18, corner_radius=9, progress_color="#2ECC71")
+        self.growth_progressbar.pack(fill="x", pady=(4, 0))
         self.growth_progressbar.set(0)
+
+        # BARRA DE SALUD DE LA PLANTA
+        salud_header = ctk.CTkFrame(left_panel, fg_color="transparent")
+        salud_header.pack(fill="x", pady=(12, 0))
+        ctk.CTkLabel(salud_header, text="🟢  Salud de la Planta", font=("Roboto", 13, "bold"), text_color="#1abc9c").pack(side="left")
+        self.lbl_salud_pct = ctk.CTkLabel(salud_header, text="100%", font=("Roboto", 13, "bold"), text_color="#1abc9c")
+        self.lbl_salud_pct.pack(side="right")
+
+        self.salud_progressbar = ctk.CTkProgressBar(left_panel, height=14, corner_radius=7, progress_color="#1abc9c")
+        self.salud_progressbar.pack(fill="x", pady=(3, 0))
+        self.salud_progressbar.set(1.0)
+        self.salud_planta = 100.0  # Valor interno (0‒100)
 
         # FILA 3: CONTADOR DE COSECHA (Tipo Widget Digital)
         cosecha_frame = ctk.CTkFrame(left_panel, fg_color="#21252f", corner_radius=12)
@@ -837,28 +860,94 @@ class VentanaInvernadero:
         proxima_etapa_frame.pack(fill="x", pady=(0, 20), ipadx=10, ipady=10)
         
         self.lbl_prox_etapa_dias = ctk.CTkLabel(proxima_etapa_frame, text="--", font=("Roboto", 24, "bold"), text_color="#3498db")
-        self.lbl_prox_etapa_dias.pack()
+        self.lbl_prox_etapa_dias.pack(pady=(8, 2))
         
         self.lbl_prox_etapa_txt = ctk.CTkLabel(proxima_etapa_frame, text="TIEMPO PARA SIGUIENTE ETAPA ⏳", font=("Roboto", 11, "bold"), text_color="gray")
-        self.lbl_prox_etapa_txt.pack()
+        self.lbl_prox_etapa_txt.pack(pady=(0, 8))
+
+        # FILA 5: BOTÓN DEL FARMING LOOP (Plantar / Cosechar)
+        self.btn_farming = ctk.CTkButton(
+            left_panel, 
+            text="PLANTAR", 
+            font=("Roboto", 18, "bold"), 
+            height=50,
+            command=self.on_btn_farming_click
+        )
+        self.btn_farming.pack(fill="x", pady=(10, 0))
 
         self.last_crecimiento = 0.0
+        self.listo_para_cosechar = False
 
-        # Panel Derecho: Motor Gráfico de Planta (Conservamos el Canvas)
+        # Panel Derecho: Tabview con Visualización e Historial
         right_panel = ctk.CTkFrame(self.premium_frame, fg_color="transparent")
-        right_panel.grid(row=0, column=1, padx=20, pady=20, sticky="nsew")
-        
-        lbl_motor = ctk.CTkLabel(right_panel, text="Evolución Procedimental", font=("Roboto", 16, "bold"), text_color="#2ECC71")
-        lbl_motor.pack(pady=(10, 5))
+        right_panel.grid(row=0, column=1, padx=10, pady=10, sticky="nsew")
+        right_panel.grid_rowconfigure(0, weight=1)
+        right_panel.grid_columnconfigure(0, weight=1)
 
-        # Integración del canvas al nuevo fondo premium
+        self.tabview_agro = ctk.CTkTabview(
+            right_panel,
+            fg_color="#21252f",
+            segmented_button_fg_color="#1A1D26",
+            segmented_button_selected_color="#2ECC71",
+            segmented_button_selected_hover_color="#27ae60",
+            segmented_button_unselected_color="#1A1D26",
+            segmented_button_unselected_hover_color="#2a2d2e",
+            text_color="white",
+            corner_radius=12,
+        )
+        self.tabview_agro.grid(row=0, column=0, sticky="nsew", padx=5, pady=5)
+        self.tabview_agro.add("🌿  Visualización")
+        self.tabview_agro.add("🏆  Historial de Cosechas")
+
+        # ── Tab 1: Canvas procedimental (30% más grande) ──────────────────────
+        tab_vis = self.tabview_agro.tab("🌿  Visualización")
+        tab_vis.grid_rowconfigure(0, weight=1)
+        tab_vis.grid_columnconfigure(0, weight=1)
+
+        canvas_frame = ctk.CTkFrame(tab_vis, fg_color="transparent")
+        canvas_frame.grid(row=0, column=0)
+
+        lbl_motor = ctk.CTkLabel(canvas_frame, text="Evolución Procedimental", font=("Roboto", 15, "bold"), text_color="#2ECC71")
+        lbl_motor.pack(pady=(8, 4))
+
         bg_canvas = "#1A1D26"
-        self.cv_planta = tk.Canvas(right_panel, width=300, height=250, bg=bg_canvas, highlightthickness=0)
-        self.cv_planta.pack(pady=10)
+        self.cv_planta = tk.Canvas(canvas_frame, width=390, height=325, bg=bg_canvas, highlightthickness=0)
+        self.cv_planta.pack(pady=5)
+
+        # ── Tab 2: Historial de cosechas ──────────────────────────────────────
+        tab_hist = self.tabview_agro.tab("🏆  Historial de Cosechas")
+        tab_hist.grid_rowconfigure(1, weight=1)
+        tab_hist.grid_columnconfigure(0, weight=1)
+
+        # Encabezados de tabla con botón de limpiar
+        header_frame = ctk.CTkFrame(tab_hist, fg_color="#12151e", corner_radius=8)
+        header_frame.grid(row=0, column=0, sticky="ew", padx=8, pady=(8, 2))
+        cols_conf = [("Ciclo #", 60), ("Semilla", 80), ("Fecha", 130), ("Salud Final (%)", 110)]
+        for col, (text, w) in enumerate(cols_conf):
+            header_frame.grid_columnconfigure(col, weight=1, minsize=w)
+            ctk.CTkLabel(header_frame, text=text, font=("Roboto", 12, "bold"),
+                         text_color="#2ECC71").grid(row=0, column=col, padx=6, pady=6, sticky="w")
+        # Columna extra para el botón limpiar
+        header_frame.grid_columnconfigure(4, weight=0)
+        ctk.CTkButton(
+            header_frame, text="🗑️ Limpiar", width=85, height=26,
+            font=("Roboto", 11, "bold"), fg_color="#c0392b", hover_color="#922b21",
+            corner_radius=6, command=self.limpiar_historial
+        ).grid(row=0, column=4, padx=(4, 6), pady=4)
+
+        # Área scrollable para las filas
+        self.historial_scroll = ctk.CTkScrollableFrame(
+            tab_hist, fg_color="#1A1D26", corner_radius=8
+        )
+        self.historial_scroll.grid(row=1, column=0, sticky="nsew", padx=8, pady=(0, 8))
+        for col in range(4):
+            self.historial_scroll.grid_columnconfigure(col, weight=1)
+
+        self.cosecha_num = 0  # Contador de ciclos
 
         self.diag_frame = ctk.CTkFrame(self.tab_agronomico, corner_radius=15, fg_color="#1A1D26", border_width=1, border_color="#3b3b3b")
         self.diag_frame.grid(row=1, column=0, padx=20, pady=10, sticky="nsew")
-        
+
         diag_title_frame = ctk.CTkFrame(self.diag_frame, fg_color="transparent")
         diag_title_frame.pack(pady=(15, 10))
         
@@ -877,6 +966,49 @@ class VentanaInvernadero:
         self.alerta_activa = False
         self.mensaje_alerta = ""
         self.blink_running = False
+
+    def on_btn_farming_click(self):
+        planta = self.ctrl.planta
+        s = getattr(self, 'salud_planta', 100.0)
+
+        if not planta.plantada:
+            # PLANTAR: reiniciar todo y arrancar nuevo ciclo
+            planta.plantar()
+            self.salud_planta = 100.0
+            self.listo_para_cosechar = False
+        elif planta.porcentaje_crecimiento >= 100.0 and s >= 94.0:
+            # COSECHAR: guardar en historial y resetear
+            self.registrar_cosecha(s)
+            planta.cosechar()
+            self.listo_para_cosechar = False
+
+    def registrar_cosecha(self, salud_final: float):
+        """Añade una fila al inventario de cosechas."""
+        import datetime
+        self.cosecha_num += 1
+        row = self.cosecha_num
+        dia_virt = getattr(self.ctrl, 'dia_virtual', 1)
+        hora_sim = self.ctrl.tiempo_simulado.strftime("%I:%M %p")
+        fecha = f"Día {dia_virt} - {hora_sim}"
+        etapa = self.lbl_etapa.cget("text") if hasattr(self, 'lbl_etapa') else "--"
+
+        bg = "#1e2430" if row % 2 == 0 else "#21252f"
+        fila_frame = ctk.CTkFrame(self.historial_scroll, fg_color=bg, corner_radius=6)
+        fila_frame.grid(row=row, column=0, columnspan=4, sticky="ew", padx=4, pady=2)
+        for col in range(4):
+            fila_frame.grid_columnconfigure(col, weight=1)
+
+        valores = [str(row), etapa, fecha, f"{salud_final:.1f}%"]
+        colores = ["white", "#2ECC71", "#95a5a6", "#F1C40F"]
+        for col, (val, color) in enumerate(zip(valores, colores)):
+            ctk.CTkLabel(fila_frame, text=val, font=("Roboto", 12),
+                         text_color=color).grid(row=0, column=col, padx=8, pady=5, sticky="w")
+
+    def limpiar_historial(self):
+        """Elimina todas las filas del inventario de cosechas y reinicia el contador."""
+        for widget in self.historial_scroll.winfo_children():
+            widget.destroy()
+        self.cosecha_num = 0
 
     def setup_tab_historico(self):
         self.tab_historico.grid_columnconfigure(0, weight=1)
@@ -1135,6 +1267,8 @@ class VentanaInvernadero:
             self.persistencia.registrar_lectura(t, h, v, r, luz, intensidad_luz)
         
         self.clock_label.configure(text=hora_actual.strftime("%I:%M:%S %p"))
+        if hasattr(self, 'lbl_dia_virtual'):
+            self.lbl_dia_virtual.configure(text=f"Día Virtual: {self.ctrl.dia_virtual}")
         self.pronostico_label.configure(text=pronostico)
         self.lbl_ext_temp.configure(text=f"🌡️ Ext: {t_ext:.1f} °C | 💧 Hum: {h_ext:.1f} %")
         
@@ -1250,7 +1384,9 @@ class VentanaInvernadero:
 
 
         # Actualizamos la tupla de datos actuales para el PanelMonitoreoGrafico independiente
-        self.current_data = (t, h, luz, v, r, esfuerzo_il, esfuerzo_c)
+        self.current_data = (t, h, luz, v, r, esfuerzo_il, esfuerzo_c,
+                             self.ctrl.motor_clima.temp_exterior,
+                             self.ctrl.motor_clima.hum_exterior)
             
         # Agronómico Premium
         self.crecimiento_target = crecimiento
@@ -1264,6 +1400,33 @@ class VentanaInvernadero:
         else: etapa = "Fructificación 🍅"
 
         self.lbl_etapa.configure(text=etapa)
+
+        # ── Barra de Salud de la Planta ──────────────────────────────────────
+        # Regla: la salud solo se puede degradar cuando el cultivo ya maduró (100%).
+        # Durante el crecimiento se recupera libremente pero no se penaliza.
+        if hasattr(self, 'salud_planta') and self.ctrl.planta.plantada:
+            if crecimiento >= 100.0 and alerta:
+                self.salud_planta = max(0.0, self.salud_planta - 0.15)
+            else:
+                self.salud_planta = min(100.0, self.salud_planta + 0.08)
+        elif not self.ctrl.planta.plantada:
+            self.salud_planta = 100.0  # Resetear al retirar planta
+
+        if hasattr(self, 'salud_progressbar'):
+            s = self.salud_planta
+            self.salud_progressbar.set(s / 100.0)
+            self.lbl_salud_pct.configure(text=f"{s:.0f}%")
+            if s >= 70:
+                color = "#1abc9c"
+                icono = "🟢"
+            elif s >= 40:
+                color = "#f39c12"
+                icono = "🟡"
+            else:
+                color = "#e74c3c"
+                icono = "🔴"
+            self.salud_progressbar.configure(progress_color=color)
+            self.lbl_salud_pct.configure(text_color=color)
         
         # Matemáticas de tiempo estimado para la cosecha y próxima etapa
         if not hasattr(self, 'last_crecimiento'):
@@ -1312,6 +1475,37 @@ class VentanaInvernadero:
             self.lbl_prox_etapa_txt.configure(text="LISTA PARA COSECHA ✅")
             
         self.last_crecimiento = crecimiento
+
+        # ── Farming Loop: Lógica unificada del botón ─────────────────────────
+        planta = self.ctrl.planta
+        s = getattr(self, 'salud_planta', 100.0)
+
+        if not planta.plantada:
+            self.btn_farming.configure(
+                state="normal", text="🌱  PLANTAR",
+                fg_color=["#1F6AA5", "#3B8ED0"], text_color="white"
+            )
+            self.listo_para_cosechar = False
+        elif crecimiento >= 100.0:
+            self.listo_para_cosechar = True
+            if s >= 94.0:
+                self.btn_farming.configure(
+                    state="normal", text="🏆  COSECHAR",
+                    fg_color="#f1c40f", text_color="#1a1a1a"
+                )
+            else:
+                self.btn_farming.configure(
+                    state="disabled", text="⚠️  Recuperando...",
+                    fg_color="#c0392b", text_color="white"
+                )
+        else:
+            self.listo_para_cosechar = False
+            self.btn_dots_count = getattr(self, 'btn_dots_count', 0) + 1
+            dots = "." * ((self.btn_dots_count % 3) + 1)
+            self.btn_farming.configure(
+                state="disabled", text=f"🌿  Creciendo{dots}",
+                fg_color="#34495e", text_color="white"
+            )
         
         if alerta:
             self.alerta_activa = True
