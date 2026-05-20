@@ -1,3 +1,11 @@
+"""
+controlador.py — Cerebro del Invernadero Virtual POO.
+
+Lee los sensores, aplica la lógica de control (P-PWM e histéresis) y
+actualiza los actuadores cada ciclo. También gestiona el reloj virtual
+y delega la persistencia de datos a GestorPersistencia.
+"""
+
 import datetime
 import random
 import math
@@ -5,7 +13,24 @@ from entidades import SensorTemperatura, SensorHumedad, SensorLuminosidad, Venti
 from persistencia import GestorPersistencia
 
 class Controlador:
+    """
+    Controlador principal del invernadero.
+
+    Integra sensores, actuadores, motor climático, modelo de planta y
+    persistencia en un único ciclo de control llamado por la interfaz
+    mediante self.procesar() cada vez que el timer de la GUI dispara.
+    """
+
     def __init__(self, sp_temp=25.0, kp_temp=10.0, sp_hum=60.0, kp_hum=5.0):
+        """
+        Inicializa todos los subsistemas del invernadero.
+
+        Args:
+            sp_temp  (float): Setpoint de temperatura (°C). Default 25.0.
+            kp_temp  (float): Ganancia proporcional temperatura. Default 10.0.
+            sp_hum   (float): Setpoint de humedad (%). Default 60.0.
+            kp_hum   (float): Ganancia proporcional humedad. Default 5.0.
+        """
         self.temp = SensorTemperatura()
         self.hum = SensorHumedad()
         self.luz = SensorLuminosidad()
@@ -36,12 +61,34 @@ class Controlador:
         self.dia_virtual = 1
         
     def registrar_lectura(self, dia_virtual, fecha_sim, t, h, v_pct, r_pct, luz, intensidad_luz, calef_pct=0, malla=False):
+        """
+        Delega la escritura de una fila al GestorPersistencia.
+
+        Se llama desde la interfaz cada 5 segundos reales para no saturar el CSV.
+        """
         self.persistencia.registrar_lectura(dia_virtual, fecha_sim, t, h, v_pct, r_pct, luz, intensidad_luz, calef_pct, malla)
         
     def obtener_historial_paginado(self, pagina, limite=50):
+        """
+        Retorna una página del historial CSV.
+
+        Returns:
+            tuple: (lista_registros, total_paginas, total_registros)
+        """
         return self.persistencia.obtener_historial_paginado(pagina, limite)
         
     def fijar_hora_manual(self, hora, minuto=0):
+        """
+        Salta el reloj virtual a una hora específica del día.
+
+        Si la hora destino es menor que la actual, se asume que avanzamos
+        al día siguiente (el tiempo es irreversible). Resetea ultimo_tick
+        para evitar que el siguiente dt_sec sea gigantesco.
+
+        Args:
+            hora   (int | str): Hora destino (0–23).
+            minuto (int):       Minuto destino. Default 0.
+        """
         # Si saltamos a una hora "anterior" a la actual, asumimos que avanzamos al día siguiente
         hora_int = int(hora)
         if hora_int < self.tiempo_simulado.hour:
@@ -58,6 +105,10 @@ class Controlador:
         self.salto_temporal = True
         
     def activar_tiempo_automatico(self):
+        """
+        Reactiva el avance automático del reloj virtual y reinicia los
+        contadores del ciclo PWM.
+        """
         self.tiempo_manual = False
         self.ultimo_tick = datetime.datetime.now()
         
@@ -66,13 +117,34 @@ class Controlador:
         self.tick_pwm = 0
 
     def procesar(self):
+        """
+        Ciclo principal de control. Se ejecuta en cada tick del timer de la GUI.
+
+        Pasos:
+            1. Calcula dt_sec (tiempo real transcurrido, máx. 0.5 s).
+            2. Avanza el reloj virtual según el multiplicador de tiempo.
+            3. Actualiza el motor climático exterior.
+            4. Calcula luz natural (curva solar) y artificial (LED).
+            5. Aplica control proporcional a calefacción y ventilador.
+            6. Aplica histéresis (tiempos muertos) a riego y deshumidificación.
+            7. Aplica rampa suave (soft-start) a todos los actuadores.
+            8. Integra los deltas termodinámicos sobre los sensores.
+
+        Returns:
+            tuple: (hora_actual, t, h, luz, v_on, r_on, il_int, calef_on,
+                    calef_pot, crecimiento, alerta, pronostico, t_ext, h_ext,
+                    esf_v, esf_r, esf_il, esf_c, estado_fotoperiodo)
+        """
         ahora = datetime.datetime.now()
+        # Limitar dt_sec a 0.5 s para evitar explosiones termodinámicas por lag
         dt_sec = min(0.5, (ahora - self.ultimo_tick).total_seconds())
         self.ultimo_tick = ahora
         
         if not getattr(self, 'tiempo_manual', False):
             dia_previo = self.tiempo_simulado.day
+            # Avanzar el reloj virtual: dt_sec real × multiplicador de velocidad
             self.tiempo_simulado += datetime.timedelta(seconds=dt_sec * self.multiplicador_tiempo)
+            # Detectar cambio de día para incrementar el contador de Días Virtuales
             if self.tiempo_simulado.day != dia_previo:
                 self.dia_virtual += 1
             
@@ -265,6 +337,10 @@ class Controlador:
         # Si está entre 45% y 63%, se mantiene el esfuerzo del ciclo anterior.
 
         # 4. Inercia Mecánica Estricta (Soft-Start / Spin-Down)
+        # ── Rampa suave (Soft-Start / Spin-Down) ────────────────────────────────
+        # Evita que los actuadores salten bruscamente entre 0% y 100%.
+        # Cada ciclo, la potencia real solo puede cambiar ±5% respecto al ciclo anterior.
+        # Esto protege los motores de picos de corriente y hace la simulación más realista.
         def ramp_up(potencia_actual, potencia_objetivo, max_delta):
             if getattr(self, 'salto_temporal', False):
                 return potencia_objetivo
@@ -306,6 +382,9 @@ class Controlador:
             self.salto_temporal = False
 
         # 5. Inercia Física Termodinámica (Deltas acumulativos)
+        # ── Inercia física termodinámica ─────────────────────────────────────────
+        # factor_inercia escala todos los deltas al tiempo simulado transcurrido.
+        # Así, a mayor velocidad de simulación, el efecto térmico es proporcional.
         dt_simulado = dt_sec * self.multiplicador_tiempo
         factor_inercia = max(0.1, dt_simulado / 2.0)
         

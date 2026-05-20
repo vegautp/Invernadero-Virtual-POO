@@ -1,3 +1,12 @@
+"""
+interfaz.py — Módulo de Interfaz Gráfica de Usuario (GUI).
+
+Construido con CustomTkinter. Es el responsable exclusivo de la visualización
+y la interacción con el usuario. Lee el estado del Controlador y renderiza
+indicadores, gráficas (con Matplotlib) y el registro histórico.
+Implementa el motor gráfico que no interfiere con la lógica física.
+"""
+
 # IMPORTANTE: Requiere instalar matplotlib. Ejecutar: pip install matplotlib
 import sys
 import os
@@ -40,7 +49,20 @@ class ToolTip:
             self.tooltip_window = None
 
 class VentanaInvernadero:
+    """
+    Clase principal de la interfaz gráfica del Invernadero Virtual.
+
+    Gestiona la ventana principal, el sistema de pestañas (tabs) y delega la
+    lógica de control al objeto Controlador. Contiene loops asíncronos para
+    animaciones visuales y actualización de datos en tiempo real.
+    """
     def __init__(self, root):
+        """
+        Inicializa la interfaz gráfica y sus pestañas.
+
+        Args:
+            root (ctk.CTk): Ventana raíz de CustomTkinter.
+        """
         self.root = root
         self.root.title("Sistema Invernadero Virtual")
         self.root.geometry("850x900")
@@ -263,6 +285,14 @@ class VentanaInvernadero:
         btn.pack(pady=10)
 
     def setup_tab_actual(self):
+        """
+        Construye la pestaña 'Monitoreo Actual'.
+
+        Crea los paneles de visualización para sensores (termómetro, higrómetro, luxómetro)
+        y actuadores (ventilador, riego, malla térmica). Utiliza Canvas de Tkinter
+        incrustados en frames de CustomTkinter para renderizar indicadores (gauges)
+        estáticos y dinámicos.
+        """
         # 1. Contenedor Infinito (Scrollable)
         self.scroll_actual = ctk.CTkScrollableFrame(self.tab_actual, fg_color="transparent")
         self.scroll_actual.pack(fill="both", expand=True, padx=5, pady=5)
@@ -544,6 +574,15 @@ class VentanaInvernadero:
             self.cv_luz.create_line(x1, y1, x2, y2, fill=color, width=3)
 
     def animar_actuadores(self):
+        """
+        Bucle asíncrono secundario para animaciones de la GUI.
+
+        Se encarga exclusivamente de actualizar la rotación del ventilador,
+        las gotas de lluvia, la opacidad de la malla térmica y el pulso del LED.
+        Al operar en un after() separado con un delay constante (50 ms),
+        garantiza que las animaciones sean fluidas sin importar el lag del
+        bucle termodinámico principal.
+        """
         """Bucle de animación de alta frecuencia para actuadores."""
         # Ventilador
         self.cv_vent.delete("all")
@@ -685,6 +724,22 @@ class VentanaInvernadero:
             self.cv_malla.create_text(W // 2, H // 2 + 8, text="PLEGADA", font=("Helvetica", 8), fill="#7f8c8d")
 
     def dibujar_planta(self, crecimiento, color_hojas, clima_actual="Soleado", plantada=True):
+        """
+        Motor de renderizado procedimental del cultivo (Canvas Tkinter).
+
+        Dibuja dinámicamente la planta en función de su porcentaje de crecimiento.
+        - 0-20%: Semilla y raíz.
+        - 21-40%: Tallo emergente.
+        - 41-70%: Ramificaciones y hojas escalables.
+        - 71-90%: Aparición de flores.
+        - 91-100%: Fructificación (tomates rojos).
+
+        Args:
+            crecimiento (float): Porcentaje de crecimiento (0 a 100).
+            color_hojas (str/list): Color RGB que refleja la salud biológica.
+            clima_actual (str): Modifica el entorno visual (sol, lluvia, luna).
+            plantada (bool): Si es False, dibuja la maceta vacía.
+        """
         self.cv_planta.delete("all")
         w, h, suelo_y = 390, 325, 286
         
@@ -782,6 +837,13 @@ class VentanaInvernadero:
 
 
     def setup_tab_grafico(self):
+        """
+        Construye la pestaña 'Monitoreo Gráfico'.
+
+        Instancia el módulo PanelMonitoreoGrafico (separado en ui/panel_graficos.py)
+        que utiliza Matplotlib incrustado en Tkinter para graficar el historial
+        en tiempo real. Le inyecta la función `obtener_datos_actuales` como callback.
+        """
         self.tab_grafico.grid_columnconfigure(0, weight=1)
         self.tab_grafico.grid_rowconfigure(1, weight=1)
 
@@ -796,6 +858,13 @@ class VentanaInvernadero:
         return self.current_data
 
     def setup_tab_agronomico(self):
+        """
+        Construye la pestaña 'Análisis Agronómico'.
+
+        Configura el canvas principal donde se renderiza la planta,
+        el panel de estado (barras de progreso de salud y crecimiento) y el
+        registro de cosechas históricas. Implementa la lógica del Farming Loop.
+        """
         self.tab_agronomico.grid_columnconfigure(0, weight=1)
         self.tab_agronomico.grid_rowconfigure(0, weight=3)
         self.tab_agronomico.grid_rowconfigure(1, weight=1)
@@ -1012,6 +1081,12 @@ class VentanaInvernadero:
         self.cosecha_num = 0
 
     def setup_tab_historico(self):
+        """
+        Construye la pestaña 'Registro Histórico'.
+
+        Configura la tabla (Treeview) de registros y los paneles de métricas globales.
+        Maneja la lógica de paginación e inicializa el auto-refresco asíncrono.
+        """
         self.tab_historico.grid_columnconfigure(0, weight=1)
         self.tab_historico.grid_rowconfigure(1, weight=1)
         
@@ -1369,6 +1444,13 @@ class VentanaInvernadero:
 
 
     def _tick_reloj(self):
+        """
+        Bucle asíncrono terciario: Reloj Virtual.
+
+        Mantiene sincronizada la hora mostrada en el Header con la hora
+        simulada del controlador. Se ajusta dinámicamente según el multiplicador
+        de velocidad para evitar saltos bruscos en el UI.
+        """
         """Loop independiente del reloj: se actualiza exactamente cada 1 segundo."""
         hora_actual = self.ctrl.tiempo_simulado
         self.clock_label.configure(text=hora_actual.strftime("%I:%M:%S %p"))
@@ -1378,7 +1460,20 @@ class VentanaInvernadero:
         self.root.after(max(20, delay_reloj), self._tick_reloj)
 
     def actualizar(self):
-        """Ciclo principal de UI: Obtiene datos del controlador y actualiza GUI/Gráfica."""
+        """
+        Ciclo principal de la Interfaz Gráfica (GUI).
+
+        Este método es el corazón asíncrono visual. Se ejecuta periódicamente
+        (con frecuencia dinámica según el multiplicador de tiempo) y realiza:
+        1. Llamada a self.ctrl.procesar() para avanzar la simulación física.
+        2. Extracción de variables de estado (temperatura, humedad, actuadores, etc).
+        3. Actualización de colores y textos (Widgets CTk) según umbrales agronómicos.
+        4. Actualización condicional del registro histórico cada 5 segundos reales.
+        5. Lógica condicional de la salud biológica de la planta (Farming Loop).
+
+        La separación de este método respecto a la física del controlador
+        garantiza que la GUI no bloquee los cálculos termodinámicos.
+        """
         resultado = self.ctrl.procesar()
         hora_actual, t, h, luz, v, r, intensidad_luz, calef_on, calef_pot, crecimiento, alerta, pronostico, t_ext, h_ext, esfuerzo_v, esfuerzo_r, esfuerzo_il, esfuerzo_c, estado_fotoperiodo = resultado
         self.estado_fotoperiodo = estado_fotoperiodo
@@ -1669,6 +1764,14 @@ class VentanaInvernadero:
         self.root.after(max(20, delay), self.actualizar)
 
     def cerrar_programa(self):
+        """
+        Maneja el evento de cierre de ventana (WM_DELETE_WINDOW).
+
+        Asegura que todos los procesos en segundo plano, incluyendo los motores
+        de Matplotlib (plt) y los bucles asíncronos de Tkinter, sean destruidos
+        limpiamente antes de invocar sys.exit(). Esto previene procesos zombis
+        y bloqueos en la terminal.
+        """
         try:
             import matplotlib.pyplot as plt
             plt.close('all')

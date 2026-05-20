@@ -1,0 +1,19 @@
+# ---------------------------------------------------------
+# LIBRERÍAS UTILIZADAS EN EL PROYECTO "INVERNADERO VIRTUAL POO"
+# ---------------------------------------------------------
+
+# --- LIBRERÍAS EXTERNAS (Requieren instalación vía pip) ---
+customtkinter      # Interfaz gráfica moderna
+matplotlib         # Renderizado de gráficas en tiempo real
+
+
+# --- LIBRERÍAS NATIVAS DE PYTHON (No requieren instalación) ---
+sys                # Manejo del cierre del sistema y procesos
+os                 # Interacción con el sistema operativo
+tkinter            # Base de la interfaz gráfica y tooltips
+math               # Cálculos matemáticos (paginación, curvas, etc.)
+random             # Simulación de fluctuación de sensores (ruido) y Markov
+datetime           # Manejo del tiempo real y del reloj virtual simulado
+collections        # Estructuras de datos (deque para historial de gráficas)
+csv                # Lectura y escritura del archivo de historial de datos
+pathlib            # Gestión moderna y segura de rutas de archivos (Path)
