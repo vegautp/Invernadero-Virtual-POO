@@ -13,7 +13,7 @@ import collections
 import datetime
 
 from controlador import Controlador
-from persistencia import GestorPersistencia
+from ui.panel_graficos import PanelMonitoreoGrafico
 
 class ToolTip:
     """Clase para mostrar un texto emergente al pasar el cursor sobre un widget."""
@@ -48,21 +48,15 @@ class VentanaInvernadero:
         self.root.protocol("WM_DELETE_WINDOW", self.cerrar_programa)
         
         self.ctrl = Controlador()
-        self.persistencia = GestorPersistencia()
+
         
-        self.max_len = 20
-        self.temp_data = collections.deque(maxlen=self.max_len)
-        self.hum_data = collections.deque(maxlen=self.max_len)
-        self.luz_data = collections.deque(maxlen=self.max_len)
-        self.calef_data = collections.deque(maxlen=self.max_len)
-        self.time_data = collections.deque(maxlen=self.max_len)
-        self.counter = 0
+        self.current_data = (0.0, 0.0, 0.0, False, False, 0.0, 0.0)
         self.ultimo_refresco_pesado = datetime.datetime.now()
 
         self.root.grid_columnconfigure(0, weight=1)
         self.root.grid_rowconfigure(1, weight=1)
 
-        self.switch_var = ctk.StringVar(value="dark")
+
         self.setup_header()
         
         self.tabview = ctk.CTkTabview(self.root)
@@ -95,6 +89,8 @@ class VentanaInvernadero:
 
         self.animar_actuadores()
         self.actualizar()
+        self._tick_reloj()  # Loop de reloj independiente, 1 seg
+
 
     def setup_header(self):
         self.header_frame = ctk.CTkFrame(self.root, fg_color="transparent")
@@ -126,24 +122,26 @@ class VentanaInvernadero:
         )
         self.estado_solar_label.grid(row=2, column=0, sticky="w", pady=(2, 0))
 
+        clock_container = ctk.CTkFrame(self.header_frame, fg_color="transparent")
+        clock_container.grid(row=0, column=1, rowspan=3, padx=(20, 20))
+        
+        self.lbl_dia_virtual = ctk.CTkLabel(
+            clock_container,
+            text="Día Virtual: 1",
+            font=("Roboto", 13, "bold"),
+            text_color="#3498db"
+        )
+        self.lbl_dia_virtual.pack(anchor="center", pady=(0, 2))
+
         self.clock_label = ctk.CTkLabel(
-            self.header_frame,
+            clock_container,
             text="00:00:00",
             font=("Roboto", 28, "bold"),
             text_color="#f39c12"
         )
-        self.clock_label.grid(row=0, column=1, rowspan=3)
+        self.clock_label.pack(anchor="center")
         
-        self.theme_switch = ctk.CTkSwitch(
-            self.header_frame, 
-            text="Modo Oscuro", 
-            command=self.toggle_theme,
-            variable=self.switch_var, 
-            onvalue="dark", 
-            offvalue="light",
-            font=("Roboto", 14)
-        )
-        self.theme_switch.grid(row=0, column=2, rowspan=3, sticky="e", padx=10)
+
         
         self.btn_abrir_banner = ctk.CTkButton(
             self.header_frame,
@@ -269,8 +267,8 @@ class VentanaInvernadero:
         self.scroll_actual = ctk.CTkScrollableFrame(self.tab_actual, fg_color="transparent")
         self.scroll_actual.pack(fill="both", expand=True, padx=5, pady=5)
 
-        bg_card = ("#e8e8e8", "#2a2d2e")
-        bg_canvas = "#2a2d2e" if self.switch_var.get() == "dark" else "#e8e8e8"
+        bg_card = "#2a2d2e"
+        bg_canvas = "#2a2d2e"
 
         # --- SECCIÓN 1 (Exterior) ---
         lbl_sec1 = ctk.CTkLabel(self.scroll_actual, text="🌎 ENTORNO EXTERIOR", font=("Arial", 12, "bold"), text_color="gray", anchor="w")
@@ -356,7 +354,7 @@ class VentanaInvernadero:
         self.interior_container.pack(fill="x", padx=15, pady=(5, 5))
         self.interior_container.grid_columnconfigure((0, 1, 2), weight=1)
 
-        self.card_t, self.lbl_t_val, self.cv_temp = create_card(self.interior_container, 0, 0, "Temperatura", "Física: Sube de día por radiación. Baja de noche hacia 15°C.\nAzul: < 15°C | Verde: 15°C a 28°C | Rojo: > 28°C")
+        self.card_t, self.lbl_t_val, self.cv_temp = create_card(self.interior_container, 0, 0, "Temperatura", "Física: Sube de día por radiación. Baja de noche hacia 15°C.\nAzul: < 15°C | Verde: 15°C a 29°C | Rojo: >= 29°C")
         self.card_h, self.lbl_h_val, self.cv_hum = create_card(self.interior_container, 0, 1, "Humedad", "Física: Baja (se evapora) cuando la temperatura sube. Sube con frío.\nAmarillo: < 40% | Azul: 40% a 80% | Rojo: > 80%")
         self.card_luz, self.lbl_luz_val, self.cv_luz = create_card(self.interior_container, 0, 2, "Luminosidad", "Agronomía: Rango de luz útil para la fotosíntesis.\nGris: < 1,000 Lx | Amarillo: 1,001 Lx a 45,000 Lx | Rojo: > 45,000 Lx")
         
@@ -506,7 +504,7 @@ class VentanaInvernadero:
 
     def draw_temp(self, t):
         self.cv_temp.delete("all")
-        color = "#3498db" if t < 15 else "#2ecc71" if t <= 28 else "#e74c3c"
+        color = "#3498db" if t < 15 else "#2ecc71" if t < 29 else "#e74c3c"
         
         self.cv_temp.create_oval(25, 52, 45, 72, outline="#bdc3c7", width=2) 
         self.cv_temp.create_line(30, 54, 30, 5, fill="#bdc3c7", width=2) 
@@ -686,42 +684,38 @@ class VentanaInvernadero:
             self.cv_malla.create_rectangle(13, 5, W - 13, 16, fill="#95a5a6", outline="")
             self.cv_malla.create_text(W // 2, H // 2 + 8, text="PLEGADA", font=("Helvetica", 8), fill="#7f8c8d")
 
-    def dibujar_planta(self, crecimiento, color_hojas, clima_actual="Soleado"):
+    def dibujar_planta(self, crecimiento, color_hojas, clima_actual="Soleado", plantada=True):
         self.cv_planta.delete("all")
-        w, h, suelo_y = 300, 250, 220
+        w, h, suelo_y = 390, 325, 286
         
         # 1. Dibujar el cielo según el clima y ciclo de luz
         if clima_actual == "Noche":
             self.cv_planta.create_rectangle(0, 0, w, suelo_y, fill="#0b0f19", outline="")
-            # Estrellas y luna
-            self.cv_planta.create_oval(40, 40, 42, 42, fill="#ffffff", outline="")
-            self.cv_planta.create_oval(140, 20, 142, 22, fill="#ffffff", outline="")
-            self.cv_planta.create_oval(250, 70, 252, 72, fill="#ffffff", outline="")
-            self.cv_planta.create_oval(220, 20, 260, 60, fill="#f1c40f", outline="")
+            self.cv_planta.create_oval(52, 52, 55, 55, fill="#ffffff", outline="")
+            self.cv_planta.create_oval(182, 26, 185, 29, fill="#ffffff", outline="")
+            self.cv_planta.create_oval(325, 91, 328, 94, fill="#ffffff", outline="")
+            self.cv_planta.create_oval(286, 26, 338, 78, fill="#f1c40f", outline="")
         elif clima_actual == "Soleado":
             self.cv_planta.create_rectangle(0, 0, w, suelo_y, fill="#5dade2", outline="")
-            # Sol radiante
-            self.cv_planta.create_oval(220, 20, 270, 70, fill="#f39c12", outline="")
-            # Rayos
-            self.cv_planta.create_line(245, 10, 245, 0, fill="#f39c12", width=3)
-            self.cv_planta.create_line(245, 80, 245, 90, fill="#f39c12", width=3)
-            self.cv_planta.create_line(210, 45, 200, 45, fill="#f39c12", width=3)
-            self.cv_planta.create_line(280, 45, 290, 45, fill="#f39c12", width=3)
+            self.cv_planta.create_oval(286, 26, 351, 91, fill="#f39c12", outline="")
+            self.cv_planta.create_line(319, 13, 319, 0, fill="#f39c12", width=3)
+            self.cv_planta.create_line(319, 104, 319, 117, fill="#f39c12", width=3)
+            self.cv_planta.create_line(273, 59, 260, 59, fill="#f39c12", width=3)
+            self.cv_planta.create_oval(286, 26, 351, 91, fill="#f39c12", outline="")
+            self.cv_planta.create_line(364, 59, 377, 59, fill="#f39c12", width=3)
         elif clima_actual == "Nublado":
             self.cv_planta.create_rectangle(0, 0, w, suelo_y, fill="#95a5a6", outline="")
-            # Nubes densas
-            self.cv_planta.create_oval(190, 30, 230, 70, fill="#7f8c8d", outline="")
-            self.cv_planta.create_oval(210, 10, 270, 70, fill="#7f8c8d", outline="")
-            self.cv_planta.create_oval(250, 30, 290, 70, fill="#7f8c8d", outline="")
+            self.cv_planta.create_oval(247, 39, 299, 91, fill="#7f8c8d", outline="")
+            self.cv_planta.create_oval(273, 13, 351, 91, fill="#7f8c8d", outline="")
+            self.cv_planta.create_oval(325, 39, 377, 91, fill="#7f8c8d", outline="")
         elif clima_actual == "Frío":
             self.cv_planta.create_rectangle(0, 0, w, suelo_y, fill="#aed6f1", outline="")
-            # Nube fría con copos
-            self.cv_planta.create_oval(190, 30, 230, 70, fill="#ecf0f1", outline="")
-            self.cv_planta.create_oval(210, 20, 270, 70, fill="#ecf0f1", outline="")
-            self.cv_planta.create_oval(250, 30, 290, 70, fill="#ecf0f1", outline="")
-            self.cv_planta.create_oval(210, 85, 214, 89, fill="#ffffff", outline="")
-            self.cv_planta.create_oval(240, 95, 244, 99, fill="#ffffff", outline="")
-            self.cv_planta.create_oval(270, 80, 274, 84, fill="#ffffff", outline="")
+            self.cv_planta.create_oval(247, 39, 299, 91, fill="#ecf0f1", outline="")
+            self.cv_planta.create_oval(273, 26, 351, 91, fill="#ecf0f1", outline="")
+            self.cv_planta.create_oval(325, 39, 377, 91, fill="#ecf0f1", outline="")
+            self.cv_planta.create_oval(273, 111, 278, 116, fill="#ffffff", outline="")
+            self.cv_planta.create_oval(312, 124, 317, 129, fill="#ffffff", outline="")
+            self.cv_planta.create_oval(351, 104, 356, 109, fill="#ffffff", outline="")
         else:
             self.cv_planta.create_rectangle(0, 0, w, suelo_y, fill="#34495e", outline="")
             
@@ -729,49 +723,52 @@ class VentanaInvernadero:
         self.cv_planta.create_rectangle(0, suelo_y, w, h, fill="#5c4033", outline="")
         self.cv_planta.create_line(0, suelo_y, w, suelo_y, fill="#3e2723", width=4)
         
+        if not plantada:
+            return
+            
         cx = w / 2
         
         # Etapa 1: Semilla a Brote (0 a 20%)
         if crecimiento <= 20:
             progreso = crecimiento / 20.0
-            tallo_h = progreso * 30
+            tallo_h = progreso * 39
             tallo_w = 2 + progreso * 2
             self.cv_planta.create_line(cx, suelo_y, cx, suelo_y - tallo_h, fill=color_hojas, width=tallo_w)
             
             if progreso > 0.3:
-                hoja_s = (progreso - 0.3) * 12
+                hoja_s = (progreso - 0.3) * 15.6
                 self.cv_planta.create_oval(cx, suelo_y - tallo_h, cx - hoja_s, suelo_y - tallo_h + hoja_s, fill=color_hojas, outline="")
                 self.cv_planta.create_oval(cx, suelo_y - tallo_h, cx + hoja_s, suelo_y - tallo_h + hoja_s, fill=color_hojas, outline="")
                 
         # Etapa 2: Plántula (21% a 60%)
         elif crecimiento <= 60:
             progreso = (crecimiento - 20) / 40.0
-            tallo_h = 30 + progreso * 80
+            tallo_h = 39 + progreso * 104
             tallo_w = 4 + progreso * 4
             self.cv_planta.create_line(cx, suelo_y, cx, suelo_y - tallo_h, fill="#27ae60", width=tallo_w, capstyle="round")
             
-            h1_s = 8 + progreso * 15
-            self.cv_planta.create_oval(cx, suelo_y - 25, cx - h1_s*2, suelo_y - 25 + h1_s, fill=color_hojas, outline="")
-            self.cv_planta.create_oval(cx, suelo_y - 25, cx + h1_s*2, suelo_y - 25 + h1_s, fill=color_hojas, outline="")
+            h1_s = 10.4 + progreso * 19.5
+            self.cv_planta.create_oval(cx, suelo_y - 32, cx - h1_s*2, suelo_y - 32 + h1_s, fill=color_hojas, outline="")
+            self.cv_planta.create_oval(cx, suelo_y - 32, cx + h1_s*2, suelo_y - 32 + h1_s, fill=color_hojas, outline="")
             
             if progreso > 0.2:
-                h2_s = (progreso - 0.2) * 20
-                self.cv_planta.create_oval(cx, suelo_y - tallo_h + 10, cx - h2_s, suelo_y - tallo_h + 10 - h2_s, fill=color_hojas, outline="")
-                self.cv_planta.create_oval(cx, suelo_y - tallo_h + 10, cx + h2_s, suelo_y - tallo_h + 10 - h2_s, fill=color_hojas, outline="")
+                h2_s = (progreso - 0.2) * 26
+                self.cv_planta.create_oval(cx, suelo_y - tallo_h + 13, cx - h2_s, suelo_y - tallo_h + 13 - h2_s, fill=color_hojas, outline="")
+                self.cv_planta.create_oval(cx, suelo_y - tallo_h + 13, cx + h2_s, suelo_y - tallo_h + 13 - h2_s, fill=color_hojas, outline="")
                 
         # Etapa 3: Adulta / Vegetativa (61% a 100%)
         else:
             progreso = (crecimiento - 60) / 40.0
-            tallo_h = 110 + progreso * 30
+            tallo_h = 143 + progreso * 39
             tallo_w = 8
             self.cv_planta.create_line(cx, suelo_y, cx, suelo_y - tallo_h, fill="#27ae60", width=tallo_w, capstyle="round")
             
-            copa_y = suelo_y - tallo_h + 10
-            copa_r = 30 + progreso * 30
+            copa_y = suelo_y - tallo_h + 13
+            copa_r = 39 + progreso * 39
             color_oscuro = "#229954" if color_hojas == "#2ecc71" else color_hojas
             
             self.cv_planta.create_oval(cx - copa_r, copa_y, cx, copa_y + copa_r*0.8, fill=color_oscuro, outline="")
-            self.cv_planta.create_oval(cx, copa_y - 10, cx + copa_r, copa_y + copa_r*0.6, fill=color_oscuro, outline="")
+            self.cv_planta.create_oval(cx, copa_y - 13, cx + copa_r, copa_y + copa_r*0.6, fill=color_oscuro, outline="")
             
             self.cv_planta.create_oval(cx - copa_r*0.9, copa_y - copa_r*1.1, cx + copa_r*0.9, copa_y + copa_r*0.3, fill=color_hojas, outline="")
             self.cv_planta.create_oval(cx - copa_r*1.2, copa_y - copa_r*0.5, cx + copa_r*0.3, copa_y + copa_r*0.6, fill=color_hojas, outline="")
@@ -779,84 +776,24 @@ class VentanaInvernadero:
             
             if crecimiento > 85:
                 alpha = min(1.0, (crecimiento - 85) / 15.0)
-                fruto_r = alpha * 6
-                for fx, fy in [(-20, -10), (15, -25), (25, 10), (-30, 15)]:
+                fruto_r = alpha * 7.8
+                for fx, fy in [(-26, -13), (20, -33), (33, 13), (-39, 20)]:
                     self.cv_planta.create_oval(cx + fx - fruto_r, copa_y + fy - fruto_r, cx + fx + fruto_r, copa_y + fy + fruto_r, fill="#e74c3c", outline="")
+
 
     def setup_tab_grafico(self):
         self.tab_grafico.grid_columnconfigure(0, weight=1)
         self.tab_grafico.grid_rowconfigure(1, weight=1)
 
-        self.accesible_var = ctk.BooleanVar(value=False)
-        self.accesible_switch = ctk.CTkSwitch(
-            self.tab_grafico,
-            text="Modo Accesible (Daltónicos)",
-            command=self.update_plot_style,
-            variable=self.accesible_var,
-            font=("Roboto", 14)
+        # Instanciar el nuevo panel gráfico independiente
+        self.panel_grafico = PanelMonitoreoGrafico(
+            master=self.tab_grafico,
+            obtener_datos_cb=self.obtener_datos_actuales
         )
-        self.accesible_switch.grid(row=0, column=0, pady=(5, 5), sticky="e")
 
-        self.fig, (self.ax_temp, self.ax_hum, self.ax_luz, self.ax_calef) = plt.subplots(4, 1, figsize=(6, 10), dpi=100)
-        self.fig.patch.set_facecolor('#2b2b2b')
-        self.fig.subplots_adjust(hspace=0.6)
-
-        for ax in (self.ax_temp, self.ax_hum, self.ax_luz, self.ax_calef):
-            ax.set_facecolor('#3b3b3b')
-            ax.tick_params(colors='white')
-            ax.xaxis.label.set_color('white')
-            ax.yaxis.label.set_color('white')
-            ax.title.set_color('white')
-        
-        self.style_normal = {
-            'temp_color': '#ff4757',
-            'hum_color': '#2ed573',
-            'luz_color': '#f1c40f',
-            'calef_color': '#e67e22',
-            'temp_ls': '-',
-            'hum_ls': '-',
-            'luz_ls': '-',
-            'calef_ls': '-'
-        }
-        
-        self.style_accesible = {
-            'temp_color': '#ffa502',
-            'hum_color': '#1e90ff',
-            'luz_color': '#9b59b6',
-            'calef_color': '#e67e22',
-            'temp_ls': '-',
-            'hum_ls': '--',
-            'luz_ls': ':',
-            'calef_ls': '-.'
-        }
-        
-        self.current_style = self.style_normal
-
-        self.ax_temp.set_title("Evolución de Temperatura")
-        self.ax_temp.set_ylabel("Temperatura (°C)")
-        self.line_temp, = self.ax_temp.plot([], [], label='Temperatura (°C)', color=self.current_style['temp_color'], linestyle=self.current_style['temp_ls'], linewidth=2)
-        
-        self.ax_hum.set_title("Evolución de Humedad")
-        self.ax_hum.set_ylabel("Humedad (%)")
-        self.line_hum, = self.ax_hum.plot([], [], label='Humedad (%)', color=self.current_style['hum_color'], linestyle=self.current_style['hum_ls'], linewidth=2)
-        
-        self.ax_luz.set_title("Historial Lumínico")
-        self.ax_luz.set_ylabel("Luminosidad (Lux)")
-        self.line_luz, = self.ax_luz.plot([], [], label='Luminosidad (Lux)', color=self.current_style['luz_color'], linestyle=self.current_style['luz_ls'], linewidth=2)
-        
-        self.ax_calef.set_title("Evolución de Calefacción")
-        self.ax_calef.set_xlabel("Tiempo (Ciclos)")
-        self.ax_calef.set_ylabel("Potencia (%)")
-        self.ax_calef.set_ylim(-5, 105)
-        self.line_calef, = self.ax_calef.plot([], [], label='Calefacción (%)', color=self.current_style['calef_color'], linestyle=self.current_style['calef_ls'], linewidth=2)
-        
-        self.legend_temp = self.ax_temp.legend(facecolor='#2b2b2b', edgecolor='white', labelcolor='white')
-        self.legend_hum = self.ax_hum.legend(facecolor='#2b2b2b', edgecolor='white', labelcolor='white')
-        self.legend_luz = self.ax_luz.legend(facecolor='#2b2b2b', edgecolor='white', labelcolor='white')
-        self.legend_calef = self.ax_calef.legend(facecolor='#2b2b2b', edgecolor='white', labelcolor='white')
-
-        self.canvas_plot = FigureCanvasTkAgg(self.fig, master=self.tab_grafico)
-        self.canvas_plot.get_tk_widget().grid(row=1, column=0, sticky="nsew", padx=10, pady=5)
+    def obtener_datos_actuales(self):
+        """Devuelve la tupla con el estado actual para que el panel gráfico la procese cada 10s."""
+        return self.current_data
 
     def setup_tab_agronomico(self):
         self.tab_agronomico.grid_columnconfigure(0, weight=1)
@@ -893,9 +830,21 @@ class VentanaInvernadero:
         self.lbl_pct = ctk.CTkLabel(progreso_frame, text="Progreso: 0.0%", font=("Roboto", 14, "bold"), text_color="#2ECC71")
         self.lbl_pct.pack(anchor="e")
         
-        self.growth_progressbar = ctk.CTkProgressBar(progreso_frame, height=20, corner_radius=10, progress_color="#2ECC71")
-        self.growth_progressbar.pack(fill="x", pady=(5, 0))
+        self.growth_progressbar = ctk.CTkProgressBar(progreso_frame, height=18, corner_radius=9, progress_color="#2ECC71")
+        self.growth_progressbar.pack(fill="x", pady=(4, 0))
         self.growth_progressbar.set(0)
+
+        # BARRA DE SALUD DE LA PLANTA
+        salud_header = ctk.CTkFrame(left_panel, fg_color="transparent")
+        salud_header.pack(fill="x", pady=(12, 0))
+        ctk.CTkLabel(salud_header, text="🟢  Salud de la Planta", font=("Roboto", 13, "bold"), text_color="#1abc9c").pack(side="left")
+        self.lbl_salud_pct = ctk.CTkLabel(salud_header, text="100%", font=("Roboto", 13, "bold"), text_color="#1abc9c")
+        self.lbl_salud_pct.pack(side="right")
+
+        self.salud_progressbar = ctk.CTkProgressBar(left_panel, height=14, corner_radius=7, progress_color="#1abc9c")
+        self.salud_progressbar.pack(fill="x", pady=(3, 0))
+        self.salud_progressbar.set(1.0)
+        self.salud_planta = 100.0  # Valor interno (0‒100)
 
         # FILA 3: CONTADOR DE COSECHA (Tipo Widget Digital)
         cosecha_frame = ctk.CTkFrame(left_panel, fg_color="#21252f", corner_radius=12)
@@ -912,28 +861,94 @@ class VentanaInvernadero:
         proxima_etapa_frame.pack(fill="x", pady=(0, 20), ipadx=10, ipady=10)
         
         self.lbl_prox_etapa_dias = ctk.CTkLabel(proxima_etapa_frame, text="--", font=("Roboto", 24, "bold"), text_color="#3498db")
-        self.lbl_prox_etapa_dias.pack()
+        self.lbl_prox_etapa_dias.pack(pady=(8, 2))
         
         self.lbl_prox_etapa_txt = ctk.CTkLabel(proxima_etapa_frame, text="TIEMPO PARA SIGUIENTE ETAPA ⏳", font=("Roboto", 11, "bold"), text_color="gray")
-        self.lbl_prox_etapa_txt.pack()
+        self.lbl_prox_etapa_txt.pack(pady=(0, 8))
+
+        # FILA 5: BOTÓN DEL FARMING LOOP (Plantar / Cosechar)
+        self.btn_farming = ctk.CTkButton(
+            left_panel, 
+            text="PLANTAR", 
+            font=("Roboto", 18, "bold"), 
+            height=50,
+            command=self.on_btn_farming_click
+        )
+        self.btn_farming.pack(fill="x", pady=(10, 0))
 
         self.last_crecimiento = 0.0
+        self.listo_para_cosechar = False
 
-        # Panel Derecho: Motor Gráfico de Planta (Conservamos el Canvas)
+        # Panel Derecho: Tabview con Visualización e Historial
         right_panel = ctk.CTkFrame(self.premium_frame, fg_color="transparent")
-        right_panel.grid(row=0, column=1, padx=20, pady=20, sticky="nsew")
-        
-        lbl_motor = ctk.CTkLabel(right_panel, text="Evolución Procedimental", font=("Roboto", 16, "bold"), text_color="#2ECC71")
-        lbl_motor.pack(pady=(10, 5))
+        right_panel.grid(row=0, column=1, padx=10, pady=10, sticky="nsew")
+        right_panel.grid_rowconfigure(0, weight=1)
+        right_panel.grid_columnconfigure(0, weight=1)
 
-        # Integración del canvas al nuevo fondo premium
-        bg_canvas = "#1A1D26" if self.switch_var.get() == "dark" else "#e8e8e8"
-        self.cv_planta = tk.Canvas(right_panel, width=300, height=250, bg=bg_canvas, highlightthickness=0)
-        self.cv_planta.pack(pady=10)
+        self.tabview_agro = ctk.CTkTabview(
+            right_panel,
+            fg_color="#21252f",
+            segmented_button_fg_color="#1A1D26",
+            segmented_button_selected_color="#2ECC71",
+            segmented_button_selected_hover_color="#27ae60",
+            segmented_button_unselected_color="#1A1D26",
+            segmented_button_unselected_hover_color="#2a2d2e",
+            text_color="white",
+            corner_radius=12,
+        )
+        self.tabview_agro.grid(row=0, column=0, sticky="nsew", padx=5, pady=5)
+        self.tabview_agro.add("🌿  Visualización")
+        self.tabview_agro.add("🏆  Historial de Cosechas")
+
+        # ── Tab 1: Canvas procedimental (30% más grande) ──────────────────────
+        tab_vis = self.tabview_agro.tab("🌿  Visualización")
+        tab_vis.grid_rowconfigure(0, weight=1)
+        tab_vis.grid_columnconfigure(0, weight=1)
+
+        canvas_frame = ctk.CTkFrame(tab_vis, fg_color="transparent")
+        canvas_frame.grid(row=0, column=0)
+
+        lbl_motor = ctk.CTkLabel(canvas_frame, text="Evolución Procedimental", font=("Roboto", 15, "bold"), text_color="#2ECC71")
+        lbl_motor.pack(pady=(8, 4))
+
+        bg_canvas = "#1A1D26"
+        self.cv_planta = tk.Canvas(canvas_frame, width=390, height=325, bg=bg_canvas, highlightthickness=0)
+        self.cv_planta.pack(pady=5)
+
+        # ── Tab 2: Historial de cosechas ──────────────────────────────────────
+        tab_hist = self.tabview_agro.tab("🏆  Historial de Cosechas")
+        tab_hist.grid_rowconfigure(1, weight=1)
+        tab_hist.grid_columnconfigure(0, weight=1)
+
+        # Encabezados de tabla con botón de limpiar
+        header_frame = ctk.CTkFrame(tab_hist, fg_color="#12151e", corner_radius=8)
+        header_frame.grid(row=0, column=0, sticky="ew", padx=8, pady=(8, 2))
+        cols_conf = [("Ciclo #", 60), ("Semilla", 80), ("Fecha", 130), ("Salud Final (%)", 110)]
+        for col, (text, w) in enumerate(cols_conf):
+            header_frame.grid_columnconfigure(col, weight=1, minsize=w)
+            ctk.CTkLabel(header_frame, text=text, font=("Roboto", 12, "bold"),
+                         text_color="#2ECC71").grid(row=0, column=col, padx=6, pady=6, sticky="w")
+        # Columna extra para el botón limpiar
+        header_frame.grid_columnconfigure(4, weight=0)
+        ctk.CTkButton(
+            header_frame, text="🗑️ Limpiar", width=85, height=26,
+            font=("Roboto", 11, "bold"), fg_color="#c0392b", hover_color="#922b21",
+            corner_radius=6, command=self.limpiar_historial
+        ).grid(row=0, column=4, padx=(4, 6), pady=4)
+
+        # Área scrollable para las filas
+        self.historial_scroll = ctk.CTkScrollableFrame(
+            tab_hist, fg_color="#1A1D26", corner_radius=8
+        )
+        self.historial_scroll.grid(row=1, column=0, sticky="nsew", padx=8, pady=(0, 8))
+        for col in range(4):
+            self.historial_scroll.grid_columnconfigure(col, weight=1)
+
+        self.cosecha_num = 0  # Contador de ciclos
 
         self.diag_frame = ctk.CTkFrame(self.tab_agronomico, corner_radius=15, fg_color="#1A1D26", border_width=1, border_color="#3b3b3b")
         self.diag_frame.grid(row=1, column=0, padx=20, pady=10, sticky="nsew")
-        
+
         diag_title_frame = ctk.CTkFrame(self.diag_frame, fg_color="transparent")
         diag_title_frame.pack(pady=(15, 10))
         
@@ -952,6 +967,49 @@ class VentanaInvernadero:
         self.alerta_activa = False
         self.mensaje_alerta = ""
         self.blink_running = False
+
+    def on_btn_farming_click(self):
+        planta = self.ctrl.planta
+        s = getattr(self, 'salud_planta', 100.0)
+
+        if not planta.plantada:
+            # PLANTAR: reiniciar todo y arrancar nuevo ciclo
+            planta.plantar()
+            self.salud_planta = 100.0
+            self.listo_para_cosechar = False
+        elif planta.porcentaje_crecimiento >= 100.0 and s >= 94.0:
+            # COSECHAR: guardar en historial y resetear
+            self.registrar_cosecha(s)
+            planta.cosechar()
+            self.listo_para_cosechar = False
+
+    def registrar_cosecha(self, salud_final: float):
+        """Añade una fila al inventario de cosechas."""
+        import datetime
+        self.cosecha_num += 1
+        row = self.cosecha_num
+        dia_virt = getattr(self.ctrl, 'dia_virtual', 1)
+        hora_sim = self.ctrl.tiempo_simulado.strftime("%I:%M %p")
+        fecha = f"Día {dia_virt} - {hora_sim}"
+        etapa = self.lbl_etapa.cget("text") if hasattr(self, 'lbl_etapa') else "--"
+
+        bg = "#1e2430" if row % 2 == 0 else "#21252f"
+        fila_frame = ctk.CTkFrame(self.historial_scroll, fg_color=bg, corner_radius=6)
+        fila_frame.grid(row=row, column=0, columnspan=4, sticky="ew", padx=4, pady=2)
+        for col in range(4):
+            fila_frame.grid_columnconfigure(col, weight=1)
+
+        valores = [str(row), etapa, fecha, f"{salud_final:.1f}%"]
+        colores = ["white", "#2ECC71", "#95a5a6", "#F1C40F"]
+        for col, (val, color) in enumerate(zip(valores, colores)):
+            ctk.CTkLabel(fila_frame, text=val, font=("Roboto", 12),
+                         text_color=color).grid(row=0, column=col, padx=8, pady=5, sticky="w")
+
+    def limpiar_historial(self):
+        """Elimina todas las filas del inventario de cosechas y reinicia el contador."""
+        for widget in self.historial_scroll.winfo_children():
+            widget.destroy()
+        self.cosecha_num = 0
 
     def setup_tab_historico(self):
         self.tab_historico.grid_columnconfigure(0, weight=1)
@@ -973,199 +1031,324 @@ class VentanaInvernadero:
 
         self.lbl_total_reg = create_stat_card(resumen_frame, "TOTAL REGISTROS", 0)
         self.lbl_temp_prom = create_stat_card(resumen_frame, "TEMP. PROMEDIO", 1)
-        self.lbl_hum_prom = create_stat_card(resumen_frame, "HUM. PROMEDIO", 2)
-        self.lbl_luz_prom = create_stat_card(resumen_frame, "LUZ PROM (6a-6p)", 3)
+        self.lbl_hum_prom  = create_stat_card(resumen_frame, "HUM. PROMEDIO", 2)
+        self.lbl_luz_prom  = create_stat_card(resumen_frame, "LUZ PROM", 3)
         
-        # 2. Tabla de Datos Moderna (Data Grid)
-        table_frame = ctk.CTkFrame(self.tab_historico, corner_radius=10, fg_color="#2b2b2b")
-        table_frame.grid(row=1, column=0, padx=20, pady=10, sticky="nsew")
-        table_frame.grid_columnconfigure(0, weight=1)
-        table_frame.grid_rowconfigure(0, weight=1)
+        # 2. Tabla con scroll vertical Y horizontal
+        table_outer = ctk.CTkFrame(self.tab_historico, corner_radius=10, fg_color="#2b2b2b")
+        table_outer.grid(row=1, column=0, padx=20, pady=10, sticky="nsew")
+        table_outer.grid_columnconfigure(0, weight=1)
+        table_outer.grid_rowconfigure(0, weight=1)
         
         style = ttk.Style()
         style.theme_use("default")
-        
-        # Eliminamos bordes 3D antiguos (relief flat), texto claro
         style.configure("Custom.Treeview",
-                        background="#2b2b2b",
-                        foreground="white",
-                        rowheight=35,
-                        fieldbackground="#2b2b2b",
-                        borderwidth=0,
-                        relief="flat",
-                        font=("Roboto", 11))
+                        background="#2b2b2b", foreground="white",
+                        rowheight=35, fieldbackground="#2b2b2b",
+                        borderwidth=0, relief="flat", font=("Roboto", 11))
         style.map("Custom.Treeview", background=[("selected", "#3498db")])
         style.configure("Custom.Treeview.Heading",
-                        background="#1e2430",
-                        foreground="white",
-                        font=("Roboto", 12, "bold"),
-                        relief="flat",
-                        borderwidth=0)
+                        background="#1e2430", foreground="white",
+                        font=("Roboto", 12, "bold"), relief="flat", borderwidth=0)
         style.map("Custom.Treeview.Heading", background=[("active", "#2c3e50")])
         
-        columns = ("Fecha_Hora", "Temp(°C)", "Hum(%)", "Luminosidad(Lx)", "Ventilador", "Bomba_Riego", "Iluminacion_LED(%)")
-        self.tree = ttk.Treeview(table_frame, columns=columns, show="headings", style="Custom.Treeview")
+        # ── Columnas actualizadas ─────────────────────────────────────────────
+        columns = (
+            "N°", "Fecha_Hora", "Temp(°C)", "Hum(%)", "Luminosidad(Lx)",
+            "Ventilador", "Aspersores", "Iluminacion_LED(%)",
+            "Calefaccion(%)", "Pant. Termica"
+        )
+        self.tree = ttk.Treeview(
+            table_outer, columns=columns, show="headings", style="Custom.Treeview"
+        )
         
-        scrollbar = ttk.Scrollbar(table_frame, orient="vertical", command=self.tree.yview)
-        self.tree.configure(yscrollcommand=scrollbar.set)
+        # Scrollbar vertical
+        v_scroll = ttk.Scrollbar(table_outer, orient="vertical",   command=self.tree.yview)
+        # Scrollbar horizontal
+        h_scroll = ttk.Scrollbar(table_outer, orient="horizontal", command=self.tree.xview)
+        self.tree.configure(yscrollcommand=v_scroll.set, xscrollcommand=h_scroll.set)
         
-        self.tree.grid(row=0, column=0, sticky="nsew", padx=(15, 0), pady=15)
-        scrollbar.grid(row=0, column=1, sticky="ns", padx=(0, 15), pady=15)
+        self.tree.grid(row=0, column=0, sticky="nsew", padx=(15, 0), pady=(15, 0))
+        v_scroll.grid(row=0, column=1, sticky="ns",  padx=(0, 15), pady=(15, 0))
+        h_scroll.grid(row=1, column=0, sticky="ew",  padx=(15, 0), pady=(0, 10))
         
         ancho_columnas = {
-            "Fecha_Hora": 160,
-            "Temp(°C)": 80,
-            "Hum(%)": 80,
-            "Luminosidad(Lx)": 110,
-            "Ventilador": 80,
-            "Bomba_Riego": 100,
-            "Iluminacion_LED(%)": 120
+            "N°":                   40,
+            "Fecha_Hora":          160,
+            "Temp(°C)":             80,
+            "Hum(%))":              80,
+            "Luminosidad(Lx)":     110,
+            "Ventilador":           85,
+            "Aspersores":           90,
+            "Iluminacion_LED(%)":  120,
+            "Calefaccion(%)": 110,
+            "Pant. Termica":       110,
         }
-        
+        nombres_visibles = {
+            "N°":                  "#",
+            "Fecha_Hora":          "Fecha / Hora",
+            "Temp(°C)":            "Temp (°C)",
+            "Hum(%))":             "Hum (%)",
+            "Luminosidad(Lx)":     "Luz (Lx)",
+            "Ventilador":          "Ventilador",
+            "Aspersores":          "Aspersores",
+            "Iluminacion_LED(%)": "Ilum. LED (%)",
+            "Calefaccion(%)": "Calef. (%)",
+            "Pant. Termica":       "Pant. Térmica",
+        }
         for col in columns:
-            self.tree.heading(col, text=col.replace("_", " "))
-            self.tree.column(col, anchor="center", width=ancho_columnas[col], minwidth=ancho_columnas[col])
+            ancho = ancho_columnas.get(col, 100)
+            self.tree.heading(col, text=nombres_visibles.get(col, col))
+            self.tree.column(col, anchor="center", width=ancho, minwidth=ancho)
             
-        # Efecto Cebra: Una fila gris muy oscura y la siguiente un poco más clara
         self.tree.tag_configure('evenrow', background="#2b2b2b")
-        self.tree.tag_configure('oddrow', background="#3b3b3b")
+        self.tree.tag_configure('oddrow',  background="#3b3b3b")
         
-        # 4. Controles Inferiores
+        # 3. Controles Inferiores y Paginación
+        self.pagina_actual = 1
+        self.total_paginas = 1
+        
         controles_frame = ctk.CTkFrame(self.tab_historico, fg_color="transparent")
         controles_frame.grid(row=2, column=0, padx=20, pady=(10, 20), sticky="ew")
-        controles_frame.grid_columnconfigure(0, weight=1)
         
         btn_container = ctk.CTkFrame(controles_frame, fg_color="transparent")
         btn_container.pack(anchor="center")
         
-        btn_refresh = ctk.CTkButton(btn_container, text="🔄 Refrescar Datos", font=("Roboto", 14, "bold"), 
-                                    fg_color="#3498db", hover_color="#2980b9",
-                                    command=self.cargar_datos_historial)
-        btn_refresh.pack(side="left", padx=10)
+        self.btn_anterior = ctk.CTkButton(
+            btn_container, text="◀ Anterior", width=100, font=("Roboto", 14, "bold"),
+            command=self.pagina_anterior
+        )
+        self.btn_anterior.pack(side="left", padx=5)
         
-        btn_export = ctk.CTkButton(btn_container, text="📄 Exportar Resumen", font=("Roboto", 14, "bold"), 
-                                   fg_color="#2ecc71", hover_color="#27ae60",
-                                   command=self.exportar_resumen)
-        btn_export.pack(side="left", padx=10)
+        self.lbl_paginacion = ctk.CTkLabel(
+            btn_container, text="Página 1 de 1", font=("Roboto", 14, "bold")
+        )
+        self.lbl_paginacion.pack(side="left", padx=10)
         
-        self.cargar_datos_historial()
+        self.btn_siguiente = ctk.CTkButton(
+            btn_container, text="Siguiente ▶", width=100, font=("Roboto", 14, "bold"),
+            command=self.pagina_siguiente
+        )
+        self.btn_siguiente.pack(side="left", padx=5)
+        
+        # Separador visual
+        ctk.CTkLabel(btn_container, text="│", font=("Roboto", 18), text_color="#555").pack(side="left", padx=8)
+        
+        self.entry_pagina = ctk.CTkEntry(btn_container, width=50, justify="center", placeholder_text="Pág")
+        self.entry_pagina.pack(side="left", padx=(0, 5))
+        
+        ctk.CTkButton(
+            btn_container, text="Ir", width=40, font=("Roboto", 14, "bold"),
+            fg_color="#8e44ad", hover_color="#9b59b6",
+            command=self.ir_a_pagina
+        ).pack(side="left", padx=5)
+        
 
-    def cargar_datos_historial(self):
-        for item in self.tree.get_children():
-            self.tree.delete(item)
-            
-        datos = self.persistencia.consultar_historial()
+
+
+        ctk.CTkButton(
+            btn_container, text="🗑️ Limpiar Datos", font=("Roboto", 14, "bold"),
+            fg_color="#c0392b", hover_color="#e74c3c",
+            command=self.limpiar_datos_historial
+        ).pack(side="left", padx=5)
         
+        self.refrescar_datos_historial()
+        self._auto_refrescar_historial()  # Iniciar loop de auto-refresco
+
+    def pagina_anterior(self):
+        if self.pagina_actual > 1:
+            self.cargar_datos_historial(self.pagina_actual - 1)
+            
+    def pagina_siguiente(self):
+        if self.pagina_actual < self.total_paginas:
+            self.cargar_datos_historial(self.pagina_actual + 1)
+            
+    def ir_a_pagina(self):
+        try:
+            pag = int(self.entry_pagina.get())
+            if 1 <= pag <= self.total_paginas:
+                self.cargar_datos_historial(pag)
+            else:
+                messagebox.showerror("Error", f"La página debe estar entre 1 y {self.total_paginas}.")
+        except ValueError:
+            messagebox.showerror("Error", "Ingrese un número de página válido.")
+            
+
+    def _calcular_promedios_globales(self):
+        # Lee TODO el historial y calcula el promedio
+        historial_completo = self.ctrl.persistencia.consultar_historial()
+        total_reg = len(historial_completo)
+        
+        if total_reg == 0:
+            self.lbl_temp_prom.configure(text="-- °C", text_color="white")
+            self.lbl_hum_prom.configure(text="-- %", text_color="white")
+            self.lbl_luz_prom.configure(text="-- Lx", text_color="white")
+            self.lbl_total_reg.configure(text="0", text_color="white")
+            return
+
         total_temp = 0.0
         total_hum = 0.0
         total_luz = 0.0
         count_luz = 0
-        
-        for i, row in enumerate(datos):
+
+        for row in historial_completo:
             try:
-                t = float(row.get("Temperatura_C") or 0)
-                h = float(row.get("Humedad_Pct") or 0)
+                t   = float(row.get("Temperatura_C") or 0)
+                h   = float(row.get("Humedad_Pct") or 0)
                 luz = float(row.get("Luminosidad_Lux") or 0)
-                led = float(row.get("Iluminacion_LED") or 0)
                 
                 total_temp += t
-                total_hum += h
+                total_hum  += h
                 
-                fecha = row.get("Fecha_Hora", "--")
+                # Extraer hora de strings tipo "Día Virtual 1 - 14:30:00" o "2026-05-19 14:30:00"
+                fecha = row.get("Fecha_Hora", "")
                 try:
-                    dt = datetime.datetime.strptime(fecha, "%Y-%m-%d %H:%M:%S")
-                    if 6 <= dt.hour < 18:
+                    if "Día Virtual" in fecha:
+                        # Formato nuevo: "Día Virtual X - HH:MM:SS"
+                        time_part = fecha.split("-")[-1].strip()
+                        dt_hour = int(time_part.split(":")[0])
+                    else:
+                        # Formato viejo
+                        dt = datetime.datetime.strptime(fecha, "%Y-%m-%d %H:%M:%S")
+                        dt_hour = dt.hour
+                        
+                    if 6 <= dt_hour < 18:
                         total_luz += luz
                         count_luz += 1
                 except Exception:
                     pass
-                
-                v_val = str(row.get("Ventilador", "")).strip().lower()
-                r_val = str(row.get("Bomba_Riego", "")).strip().lower()
-                
-                v = "ON" if v_val == "true" else "OFF"
-                r = "ON" if r_val == "true" else "OFF"
-                
-                tag = 'evenrow' if i % 2 == 0 else 'oddrow'
-                self.tree.insert("", "end", values=(fecha, f"{t:.1f}", f"{h:.1f}", f"{luz:.0f}", v, r, f"{led:.0f}%"), tags=(tag,))
             except Exception:
-                pass
-                
-        total_reg = len(datos)
-        if total_reg > 0:
-            prom_t = total_temp / total_reg
-            prom_h = total_hum / total_reg
-            self.lbl_temp_prom.configure(text=f"{prom_t:.1f} °C", text_color="#3498db" if prom_t < 15 else "#2ecc71" if prom_t <= 28 else "#e74c3c")
-            self.lbl_hum_prom.configure(text=f"{prom_h:.1f} %", text_color="#f1c40f" if prom_h < 40 else "#3498db" if prom_h <= 80 else "#e74c3c")
-        else:
-            self.lbl_temp_prom.configure(text="-- °C", text_color="white")
-            self.lbl_hum_prom.configure(text="-- %", text_color="white")
-            
+                continue
+
+        prom_t = total_temp / total_reg
+        prom_h = total_hum / total_reg
+        self.lbl_temp_prom.configure(text=f"{prom_t:.1f} °C", text_color="#3498db" if prom_t < 15 else "#2ecc71" if prom_t < 29 else "#e74c3c")
+        self.lbl_hum_prom.configure(text=f"{prom_h:.1f} %", text_color="#f1c40f" if prom_h < 40 else "#3498db" if prom_h <= 80 else "#e74c3c")
+        
         if count_luz > 0:
             prom_luz = total_luz / count_luz
-            self.lbl_luz_prom.configure(text=f"{prom_luz:.0f} Lx", text_color="#95a5a6" if prom_luz < 2000 else "#f1c40f" if prom_luz <= 8500 else "#e74c3c")
+            self.lbl_luz_prom.configure(text=f"{prom_luz:.0f} Lx", text_color="#95a5a6" if prom_luz < 1000 else "#f1c40f" if prom_luz <= 45000 else "#e74c3c")
         else:
             self.lbl_luz_prom.configure(text="-- Lx", text_color="white")
             
         self.lbl_total_reg.configure(text=str(total_reg), text_color="white")
-        
-    def agregar_lectura_a_tabla(self, t, h, luz, v, r, led):
-        now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        v_str = "ON" if v else "OFF"
-        r_str = "ON" if r else "OFF"
-        
-        # Obtener el número actual de filas para alternar colores de fila
-        num_filas = len(self.tree.get_children())
-        tag = 'evenrow' if num_filas % 2 == 0 else 'oddrow'
-        
-        # Insertar al final del treeview
-        self.tree.insert("", "end", values=(now_str, f"{t:.1f}", f"{h:.1f}", f"{luz:.0f}", v_str, r_str, f"{led:.0f}%"), tags=(tag,))
-        
-        # Mantener un límite de 500 filas en la interfaz para evitar degradación de rendimiento
-        children = self.tree.get_children()
-        if len(children) > 500:
-            self.tree.delete(children[0])
-            
-        # Actualizar las estadísticas de la UI de forma rápida
-        datos = self.persistencia.consultar_historial()
-        total_reg = len(datos)
-        if total_reg > 0:
-            total_temp = 0.0
-            total_hum = 0.0
-            total_luz = 0.0
-            count_luz = 0
-            for row in datos:
-                try:
-                    rt = float(row.get("Temperatura_C") or 0)
-                    rh = float(row.get("Humedad_Pct") or 0)
-                    rluz = float(row.get("Luminosidad_Lux") or 0)
-                    
-                    total_temp += rt
-                    total_hum += rh
-                    
-                    fecha = row.get("Fecha_Hora", "--")
-                    dt = datetime.datetime.strptime(fecha, "%Y-%m-%d %H:%M:%S")
-                    if 6 <= dt.hour < 18:
-                        total_luz += rluz
-                        count_luz += 1
-                except Exception:
-                    pass
-                    
-            prom_t = total_temp / total_reg
-            prom_h = total_hum / total_reg
-            self.lbl_temp_prom.configure(text=f"{prom_t:.1f} °C", text_color="#3498db" if prom_t < 15 else "#2ecc71" if prom_t <= 28 else "#e74c3c")
-            self.lbl_hum_prom.configure(text=f"{prom_h:.1f} %", text_color="#f1c40f" if prom_h < 40 else "#3498db" if prom_h <= 80 else "#e74c3c")
-            
-            if count_luz > 0:
-                prom_luz = total_luz / count_luz
-                self.lbl_luz_prom.configure(text=f"{prom_luz:.0f} Lx", text_color="#95a5a6" if prom_luz < 2000 else "#f1c40f" if prom_luz <= 8500 else "#e74c3c")
-            else:
-                self.lbl_luz_prom.configure(text="-- Lx", text_color="white")
-                
-            self.lbl_total_reg.configure(text=str(total_reg), text_color="white")
 
-    def exportar_resumen(self):
-        messagebox.showinfo("Exportar Resumen", "El reporte en PDF ha sido generado y exportado con éxito.")
+    def refrescar_datos_historial(self):
+        """Actualiza promedios globales y recarga la página 1."""
+        self._calcular_promedios_globales()
+        self.cargar_datos_historial(1)
+
+    def _auto_refrescar_historial(self):
+        """Refresca silenciosamente el historial en la página actual cada 5 segundos."""
+        self._calcular_promedios_globales()
+        self.cargar_datos_historial(self.pagina_actual)
+        self.root.after(5000, self._auto_refrescar_historial)
+
+    def limpiar_datos_historial(self):
+        """Borra todos los registros del CSV con un diálogo NO bloqueante."""
+        dialogo = ctk.CTkToplevel(self.root)
+        dialogo.title("Confirmar")
+        dialogo.geometry("380x160")
+        dialogo.attributes("-topmost", True)
+        dialogo.resizable(False, False)
+        dialogo.grab_set()  # Modal sin bloquear el hilo del reloj
+
+        ctk.CTkLabel(
+            dialogo,
+            text="¿Borrar TODOS los datos del historial?",
+            font=("Roboto", 15, "bold")
+        ).pack(pady=(22, 4))
+        ctk.CTkLabel(
+            dialogo,
+            text="Esta acción no se puede deshacer.",
+            font=("Roboto", 12),
+            text_color="#e74c3c"
+        ).pack(pady=(0, 16))
+
+        btn_frame = ctk.CTkFrame(dialogo, fg_color="transparent")
+        btn_frame.pack()
+
+        def confirmar():
+            dialogo.destroy()
+            import csv
+            with self.ctrl.persistencia.ruta.open(mode='w', newline='', encoding='utf-8') as f:
+                writer = csv.writer(f)
+                writer.writerow(["Fecha_Hora", "Temperatura_C", "Humedad_Pct", "Ventilador",
+                                  "Aspersores", "Luminosidad_Lux", "Iluminacion_LED",
+                                  "Calefaccion_Pct", "Malla_Desplegada"])
+            self.refrescar_datos_historial()
+
+        ctk.CTkButton(
+            btn_frame, text="Sí, borrar", width=120,
+            fg_color="#c0392b", hover_color="#e74c3c",
+            font=("Roboto", 13, "bold"), command=confirmar
+        ).pack(side="left", padx=10)
+        ctk.CTkButton(
+            btn_frame, text="Cancelar", width=120,
+            fg_color="#555", hover_color="#777",
+            font=("Roboto", 13, "bold"), command=dialogo.destroy
+        ).pack(side="left", padx=10)
+
+    def cargar_datos_historial(self, pagina):
+        existing_items = self.tree.get_children()
+
+            
+        datos, total_pag, total_reg = self.ctrl.obtener_historial_paginado(pagina, limite=50)
+        self.pagina_actual = pagina
+        self.total_paginas = max(1, total_pag)
+        
+        self.lbl_paginacion.configure(text=f"Página {self.pagina_actual} de {self.total_paginas}")
+        self.entry_pagina.delete(0, 'end')
+        
+        self.btn_anterior.configure(state="normal" if self.pagina_actual > 1 else "disabled")
+        self.btn_siguiente.configure(state="normal" if self.pagina_actual < self.total_paginas else "disabled")
+        
+        for i, row in enumerate(datos):
+            try:
+                fecha = row.get("Fecha_Hora", "--")
+                t   = float(row.get("Temperatura_C") or 0)
+                h   = float(row.get("Humedad_Pct") or 0)
+                luz = float(row.get("Luminosidad_Lux") or 0)
+                led = float(row.get("Iluminacion_LED") or 0)
+                
+                v_val = str(row.get("Ventilador", "")).strip()
+                # Compatibilidad: columna puede llamarse Aspersores o Bomba_Riego (datos viejos)
+                r_raw = row.get("Aspersores") or row.get("Bomba_Riego", "")
+                r_val = str(r_raw).strip()
+
+                calef_raw = row.get("Calefaccion_Pct", "")
+                malla_raw = row.get("Malla_Desplegada", "")
+
+                def _to_pct(raw_str):
+                    """Convierte True/False o número a cadena de porcentaje."""
+                    s = raw_str.lower()
+                    if s == "true":  return "100%"
+                    if s == "false": return "0%"
+                    try:
+                        return f"{float(raw_str):.0f}%"
+                    except (ValueError, TypeError):
+                        return "--"
+
+                v_disp    = _to_pct(v_val)
+                r_disp    = _to_pct(r_val)
+                calef_disp = _to_pct(calef_raw) if calef_raw not in ("", None) else "--"
+                malla_disp = "🟢 Sí" if malla_raw.lower() == "true" else "🔴 No"
+                
+                tag = 'evenrow' if i % 2 == 0 else 'oddrow'
+                values = (i + 1, fecha, f"{t:.1f}", f"{h:.1f}", f"{luz:.0f}", v_disp, r_disp, f"{led:.0f}%", calef_disp, malla_disp)
+                
+                if i < len(existing_items):
+                    self.tree.item(existing_items[i], values=values, tags=(tag,))
+                else:
+                    self.tree.insert("", "end", values=values, tags=(tag,))
+            except Exception:
+                pass
+                
+        # Eliminar cualquier fila sobrante si la nueva página tiene menos de 50 registros
+        for i in range(len(datos), len(existing_items)):
+            self.tree.delete(existing_items[i])
+                
+
 
     def animar_alerta(self):
         if not self.alerta_activa:
@@ -1183,84 +1366,16 @@ class VentanaInvernadero:
             
         self.root.after(500, self.animar_alerta)
 
-    def toggle_theme(self):
-        if self.switch_var.get() == "dark":
-            ctk.set_appearance_mode("dark")
-            self.theme_switch.configure(text="Modo Oscuro")
-            self.fig.patch.set_facecolor('#2b2b2b')
-            bg_color = '#3b3b3b'
-            text_color = 'white'
-            facecolor_leg = '#2b2b2b'
-            canvas_bg = "#2a2d2e"
-        else:
-            ctk.set_appearance_mode("light")
-            self.theme_switch.configure(text="Modo Claro")
-            self.fig.patch.set_facecolor('#f0f0f0')
-            bg_color = '#ffffff'
-            text_color = 'black'
-            facecolor_leg = '#f0f0f0'
-            canvas_bg = "#e8e8e8"
 
-        self.cv_temp.configure(bg=canvas_bg)
-        self.cv_hum.configure(bg=canvas_bg)
-        self.cv_luz.configure(bg=canvas_bg)
-        self.cv_vent.configure(bg=canvas_bg)
-        self.cv_riego.configure(bg=canvas_bg)
-        self.cv_ilum.configure(bg=canvas_bg)
-        self.cv_calef.configure(bg=canvas_bg)
-        self.cv_malla.configure(bg=canvas_bg)
-        
-        cv_planta_bg = "#1A1D26" if self.switch_var.get() == "dark" else canvas_bg
-        self.cv_planta.configure(bg=cv_planta_bg)
 
-        for ax in (self.ax_temp, self.ax_hum, self.ax_luz, self.ax_calef):
-            ax.set_facecolor(bg_color)
-            ax.tick_params(colors=text_color)
-            ax.xaxis.label.set_color(text_color)
-            ax.yaxis.label.set_color(text_color)
-            ax.title.set_color(text_color)
-        
-        for legend in (getattr(self, 'legend_temp', None), getattr(self, 'legend_hum', None), getattr(self, 'legend_luz', None), getattr(self, 'legend_calef', None)):
-            if legend:
-                legend.get_frame().set_facecolor(facecolor_leg)
-                legend.get_frame().set_edgecolor(text_color)
-                for text in legend.get_texts():
-                    text.set_color(text_color)
-                
-        self.canvas_plot.draw()
-
-    def update_plot_style(self):
-        if self.accesible_var.get():
-            self.current_style = self.style_accesible
-        else:
-            self.current_style = self.style_normal
-            
-        self.line_temp.set_color(self.current_style['temp_color'])
-        self.line_temp.set_linestyle(self.current_style['temp_ls'])
-        
-        self.line_hum.set_color(self.current_style['hum_color'])
-        self.line_hum.set_linestyle(self.current_style['hum_ls'])
-        
-        self.line_luz.set_color(self.current_style['luz_color'])
-        self.line_luz.set_linestyle(self.current_style['luz_ls'])
-        
-        self.line_calef.set_color(self.current_style['calef_color'])
-        self.line_calef.set_linestyle(self.current_style['calef_ls'])
-        
-        self.legend_temp.remove()
-        self.legend_hum.remove()
-        self.legend_luz.remove()
-        self.legend_calef.remove()
-        
-        facecolor = '#2b2b2b' if self.switch_var.get() == "dark" else '#f0f0f0'
-        text_color = 'white' if self.switch_var.get() == "dark" else 'black'
-        
-        self.legend_temp = self.ax_temp.legend(facecolor=facecolor, edgecolor=text_color, labelcolor=text_color)
-        self.legend_hum = self.ax_hum.legend(facecolor=facecolor, edgecolor=text_color, labelcolor=text_color)
-        self.legend_luz = self.ax_luz.legend(facecolor=facecolor, edgecolor=text_color, labelcolor=text_color)
-        self.legend_calef = self.ax_calef.legend(facecolor=facecolor, edgecolor=text_color, labelcolor=text_color)
-        
-        self.canvas_plot.draw()
+    def _tick_reloj(self):
+        """Loop independiente del reloj: se actualiza exactamente cada 1 segundo."""
+        hora_actual = self.ctrl.tiempo_simulado
+        self.clock_label.configure(text=hora_actual.strftime("%I:%M:%S %p"))
+        if hasattr(self, 'lbl_dia_virtual'):
+            self.lbl_dia_virtual.configure(text=f"Día Virtual: {self.ctrl.dia_virtual}")
+        delay_reloj = int(1000 / max(1.0, self.ctrl.multiplicador_tiempo))
+        self.root.after(max(20, delay_reloj), self._tick_reloj)
 
     def actualizar(self):
         """Ciclo principal de UI: Obtiene datos del controlador y actualiza GUI/Gráfica."""
@@ -1280,13 +1395,22 @@ class VentanaInvernadero:
             self.clima_actual = "Frío"
             
         ahora_real = datetime.datetime.now()
-        hacer_refresco_pesado = (ahora_real - self.ultimo_refresco_pesado).total_seconds() >= 1.0 or self.ctrl.multiplicador_tiempo == 1.0
+        hacer_refresco_pesado = (ahora_real - self.ultimo_refresco_pesado).total_seconds() >= 5.0
         
         if hacer_refresco_pesado:
             self.ultimo_refresco_pesado = ahora_real
-            self.persistencia.registrar_lectura(t, h, v, r, luz, intensidad_luz)
+            self.ctrl.registrar_lectura(
+                self.ctrl.dia_virtual,
+                hora_actual,          # fecha/hora SIMULADA
+                t, h,
+                esfuerzo_v,           # % ventilador
+                esfuerzo_r,           # % aspersores
+                luz, intensidad_luz,
+                calef_pct=calef_pot,
+                malla=self.ctrl.malla_desplegada
+            )
         
-        self.clock_label.configure(text=hora_actual.strftime("%I:%M:%S %p"))
+        # Nota: el reloj se actualiza en _tick_reloj() cada 1 segundo, no aquí
         self.pronostico_label.configure(text=pronostico)
         self.lbl_ext_temp.configure(text=f"🌡️ Ext: {t_ext:.1f} °C | 💧 Hum: {h_ext:.1f} %")
         
@@ -1315,7 +1439,7 @@ class VentanaInvernadero:
         
         # Temp logic
         if t < 15: t_color = "#3498db"
-        elif t <= 28: t_color = "#2ecc71"
+        elif t < 29: t_color = "#2ecc71"
         else: t_color = "#e74c3c"
             
         self.lbl_t_val.configure(text=f"{t:.1f} °C", text_color=t_color)
@@ -1401,32 +1525,10 @@ class VentanaInvernadero:
         self.card_malla.configure(border_color=malla_border)
 
 
-        try:
-            self.counter += 1
-            self.time_data.append(self.counter)
-            self.temp_data.append(float(t))
-            self.hum_data.append(float(h))
-            self.luz_data.append(float(luz))
-            self.calef_data.append(float(esfuerzo_c))
-            
-            self.line_temp.set_data(self.time_data, self.temp_data)
-            self.line_hum.set_data(self.time_data, self.hum_data)
-            self.line_luz.set_data(self.time_data, self.luz_data)
-            self.line_calef.set_data(self.time_data, self.calef_data)
-            
-            self.ax_temp.relim()
-            self.ax_temp.autoscale_view()
-            self.ax_hum.relim()
-            self.ax_hum.autoscale_view()
-            self.ax_luz.relim()
-            self.ax_luz.autoscale_view()
-            self.ax_calef.relim()
-            self.ax_calef.autoscale_view()
-            
-            if hacer_refresco_pesado:
-                self.canvas_plot.draw()
-        except (ValueError, TypeError):
-            pass 
+        # Actualizamos la tupla de datos actuales para el PanelMonitoreoGrafico independiente
+        self.current_data = (t, h, luz, v, r, esfuerzo_il, esfuerzo_c,
+                             self.ctrl.motor_clima.temp_exterior,
+                             self.ctrl.motor_clima.hum_exterior)
             
         # Agronómico Premium
         self.crecimiento_target = crecimiento
@@ -1440,6 +1542,33 @@ class VentanaInvernadero:
         else: etapa = "Fructificación 🍅"
 
         self.lbl_etapa.configure(text=etapa)
+
+        # ── Barra de Salud de la Planta ──────────────────────────────────────
+        # Regla: la salud solo se puede degradar cuando el cultivo ya maduró (100%).
+        # Durante el crecimiento se recupera libremente pero no se penaliza.
+        if hasattr(self, 'salud_planta') and self.ctrl.planta.plantada:
+            if crecimiento >= 100.0 and alerta:
+                self.salud_planta = max(0.0, self.salud_planta - 0.15)
+            else:
+                self.salud_planta = min(100.0, self.salud_planta + 0.08)
+        elif not self.ctrl.planta.plantada:
+            self.salud_planta = 100.0  # Resetear al retirar planta
+
+        if hasattr(self, 'salud_progressbar'):
+            s = self.salud_planta
+            self.salud_progressbar.set(s / 100.0)
+            self.lbl_salud_pct.configure(text=f"{s:.0f}%")
+            if s >= 70:
+                color = "#1abc9c"
+                icono = "🟢"
+            elif s >= 40:
+                color = "#f39c12"
+                icono = "🟡"
+            else:
+                color = "#e74c3c"
+                icono = "🔴"
+            self.salud_progressbar.configure(progress_color=color)
+            self.lbl_salud_pct.configure(text_color=color)
         
         # Matemáticas de tiempo estimado para la cosecha y próxima etapa
         if not hasattr(self, 'last_crecimiento'):
@@ -1488,6 +1617,37 @@ class VentanaInvernadero:
             self.lbl_prox_etapa_txt.configure(text="LISTA PARA COSECHA ✅")
             
         self.last_crecimiento = crecimiento
+
+        # ── Farming Loop: Lógica unificada del botón ─────────────────────────
+        planta = self.ctrl.planta
+        s = getattr(self, 'salud_planta', 100.0)
+
+        if not planta.plantada:
+            self.btn_farming.configure(
+                state="normal", text="🌱  PLANTAR",
+                fg_color=["#1F6AA5", "#3B8ED0"], text_color="white"
+            )
+            self.listo_para_cosechar = False
+        elif crecimiento >= 100.0:
+            self.listo_para_cosechar = True
+            if s >= 94.0:
+                self.btn_farming.configure(
+                    state="normal", text="🏆  COSECHAR",
+                    fg_color="#f1c40f", text_color="#1a1a1a"
+                )
+            else:
+                self.btn_farming.configure(
+                    state="disabled", text="⚠️  Recuperando...",
+                    fg_color="#c0392b", text_color="white"
+                )
+        else:
+            self.listo_para_cosechar = False
+            self.btn_dots_count = getattr(self, 'btn_dots_count', 0) + 1
+            dots = "." * ((self.btn_dots_count % 3) + 1)
+            self.btn_farming.configure(
+                state="disabled", text=f"🌿  Creciendo{dots}",
+                fg_color="#34495e", text_color="white"
+            )
         
         if alerta:
             self.alerta_activa = True
@@ -1505,17 +1665,15 @@ class VentanaInvernadero:
             self.alerta_activa = False
             self.target_rgb = [46, 204, 113] # #2ecc71 (Verde sano)
             
-        # Auto-refrescar la tabla y métricas del registro histórico de forma optimizada y fluida
-        if hacer_refresco_pesado:
-            self.agregar_lectura_a_tabla(t, h, luz, v, r, intensidad_luz)
-        
-        delay = max(40, int(2000 / self.ctrl.multiplicador_tiempo))
-        self.root.after(delay, self.actualizar)
+        delay = int(1000 / max(1.0, self.ctrl.multiplicador_tiempo))
+        self.root.after(max(20, delay), self.actualizar)
 
     def cerrar_programa(self):
         try:
+            import matplotlib.pyplot as plt
+            plt.close('all')
             self.root.quit()
             self.root.destroy()
-        except:
+        except Exception:
             pass
-        os._exit(0)
+        sys.exit(0)
